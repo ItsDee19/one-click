@@ -1,0 +1,83 @@
+{
+  "symbol": "POLYCAB",
+  "ticker": "POLYCAB.NS",
+  "name": "Polycab India",
+  "cap_segment": "mid",
+  "sector": "Electricals",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 6842.0,
+    "day_open": 6800.0,
+    "day_high": 6889.9,
+    "day_low": 6780.1,
+    "prev_close": 6795.5,
+    "day_change_pct": 0.68,
+    "volume": 412000
+  },
+  "range_52w": {
+    "high": 7605.0,
+    "low": 4555.0,
+    "pct_from_high": -10.03,
+    "position_pct": 74.98
+  },
+  "technicals": {
+    "rvol": 1.05,
+    "price_vs_sma_pct": 2.9,
+    "sma_period": 20,
+    "window_return_pct": 4.1,
+    "swing_high": 6889.9,
+    "swing_low": 6420.5,
+    "day_range_position_pct": 56.38,
+    "trend": "up"
+  },
+  "analyst": {
+    "consensus": "buy",
+    "num_analysts": 24,
+    "buy_pct": 79.2,
+    "hold_pct": 12.5,
+    "sell_pct": 8.3,
+    "target_mean": 7550.0,
+    "target_low": 5900.0,
+    "target_high": 8600.0,
+    "upside_pct": 10.35
+  },
+  "news": {
+    "total": 4,
+    "positive": 1,
+    "negative": 1,
+    "neutral": 2,
+    "net_tone": 0,
+    "recent": [
+      {
+        "title": "Cables maker inches up in a range-bound session",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      },
+      {
+        "title": "Capacity expansion progressing as guided",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Commodity cost pressure flagged for the coming quarter",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Distribution reach commentary unchanged",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

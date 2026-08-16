@@ -1,0 +1,83 @@
+{
+  "symbol": "SUNPHARMA",
+  "ticker": "SUNPHARMA.NS",
+  "name": "Sun Pharmaceutical",
+  "cap_segment": "large",
+  "sector": "Pharmaceuticals",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 1698.4,
+    "day_open": 1678.0,
+    "day_high": 1706.9,
+    "day_low": 1672.5,
+    "prev_close": 1674.1,
+    "day_change_pct": 1.45,
+    "volume": 2340000
+  },
+  "range_52w": {
+    "high": 1960.35,
+    "low": 1436.1,
+    "pct_from_high": -13.36,
+    "position_pct": 50.03
+  },
+  "technicals": {
+    "rvol": 1.42,
+    "price_vs_sma_pct": 2.2,
+    "sma_period": 20,
+    "window_return_pct": 3.1,
+    "swing_high": 1706.9,
+    "swing_low": 1621.4,
+    "day_range_position_pct": 75.29,
+    "trend": "up"
+  },
+  "analyst": {
+    "consensus": "buy",
+    "num_analysts": 29,
+    "buy_pct": 75.9,
+    "hold_pct": 17.2,
+    "sell_pct": 6.9,
+    "target_mean": 1930.0,
+    "target_low": 1600.0,
+    "target_high": 2200.0,
+    "upside_pct": 13.64
+  },
+  "news": {
+    "total": 4,
+    "positive": 2,
+    "negative": 1,
+    "neutral": 1,
+    "net_tone": 1,
+    "recent": [
+      {
+        "title": "Pharma major gains after a regulatory approval",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Specialty portfolio described as scaling well",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "US pricing pressure flagged as a continuing risk",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Sector index trades firm",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

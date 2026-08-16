@@ -1,0 +1,95 @@
+{
+  "symbol": "TATAMOTORS",
+  "ticker": "TATAMOTORS.NS",
+  "name": "Tata Motors",
+  "cap_segment": "large",
+  "sector": "Automobile",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 612.4,
+    "day_open": 627.0,
+    "day_high": 628.9,
+    "day_low": 609.15,
+    "prev_close": 628.75,
+    "day_change_pct": -2.6,
+    "volume": 22400000
+  },
+  "range_52w": {
+    "high": 1179.05,
+    "low": 535.75,
+    "pct_from_high": -48.06,
+    "position_pct": 11.92
+  },
+  "technicals": {
+    "rvol": 0.82,
+    "price_vs_sma_pct": -5.4,
+    "sma_period": 20,
+    "window_return_pct": -8.9,
+    "swing_high": 682.3,
+    "swing_low": 605.1,
+    "day_range_position_pct": 16.46,
+    "trend": "down"
+  },
+  "analyst": {
+    "consensus": "hold",
+    "num_analysts": 31,
+    "buy_pct": 45.2,
+    "hold_pct": 38.7,
+    "sell_pct": 16.1,
+    "target_mean": 690.0,
+    "target_low": 500.0,
+    "target_high": 900.0,
+    "upside_pct": 12.67
+  },
+  "news": {
+    "total": 6,
+    "positive": 1,
+    "negative": 4,
+    "neutral": 1,
+    "net_tone": -3,
+    "recent": [
+      {
+        "title": "Auto maker falls as volume growth disappoints",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Overseas subsidiary demand described as weak",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Brokerage downgrades the stock on margin concerns",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "EV portfolio expansion continues on schedule",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Discounting pressure builds across the segment",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Counter trades near its 52-week low",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

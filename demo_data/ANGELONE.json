@@ -1,0 +1,83 @@
+{
+  "symbol": "ANGELONE",
+  "ticker": "ANGELONE.NS",
+  "name": "Angel One",
+  "cap_segment": "small",
+  "sector": "Broking",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 2688.3,
+    "day_open": 2610.0,
+    "day_high": 2704.6,
+    "day_low": 2598.4,
+    "prev_close": 2601.75,
+    "day_change_pct": 3.33,
+    "volume": 1980000
+  },
+  "range_52w": {
+    "high": 3900.0,
+    "low": 1932.5,
+    "pct_from_high": -31.07,
+    "position_pct": 38.41
+  },
+  "technicals": {
+    "rvol": 2.2,
+    "price_vs_sma_pct": 5.6,
+    "sma_period": 20,
+    "window_return_pct": 7.9,
+    "swing_high": 2704.6,
+    "swing_low": 2410.2,
+    "day_range_position_pct": 84.65,
+    "trend": "up"
+  },
+  "analyst": {
+    "consensus": "hold",
+    "num_analysts": 12,
+    "buy_pct": 50.0,
+    "hold_pct": 33.3,
+    "sell_pct": 16.7,
+    "target_mean": 2900.0,
+    "target_low": 2200.0,
+    "target_high": 3600.0,
+    "upside_pct": 7.87
+  },
+  "news": {
+    "total": 4,
+    "positive": 1,
+    "negative": 2,
+    "neutral": 1,
+    "net_tone": -1,
+    "recent": [
+      {
+        "title": "Broker rebounds sharply from recent lows",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Regulatory changes to derivatives trading weigh on volumes",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Client addition pace slows from the earlier run rate",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Peer set trades higher through the session",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

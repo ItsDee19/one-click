@@ -1,0 +1,87 @@
+{
+  "symbol": "CDSL",
+  "ticker": "CDSL.NS",
+  "name": "Central Depository Services",
+  "cap_segment": "small",
+  "sector": "Capital Markets",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 1487.9,
+    "day_open": 1455.0,
+    "day_high": 1498.6,
+    "day_low": 1451.2,
+    "prev_close": 1452.3,
+    "day_change_pct": 2.45,
+    "volume": 3180000
+  },
+  "range_52w": {
+    "high": 1989.8,
+    "low": 1047.6,
+    "pct_from_high": -25.22,
+    "position_pct": 46.73
+  },
+  "technicals": {
+    "rvol": 1.9,
+    "price_vs_sma_pct": 3.8,
+    "sma_period": 20,
+    "window_return_pct": 5.2,
+    "swing_high": 1498.6,
+    "swing_low": 1388.4,
+    "day_range_position_pct": 77.43,
+    "trend": "up"
+  },
+  "analyst": {
+    "consensus": null,
+    "num_analysts": null,
+    "buy_pct": null,
+    "hold_pct": null,
+    "sell_pct": null,
+    "target_mean": null,
+    "target_low": null,
+    "target_high": null,
+    "upside_pct": null
+  },
+  "news": {
+    "total": 3,
+    "positive": 2,
+    "negative": 0,
+    "neutral": 1,
+    "net_tone": 2,
+    "recent": [
+      {
+        "title": "Depository gains as market activity picks up",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Demat account additions stay healthy",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Fee structure review remains pending",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [
+    "analyst.consensus",
+    "analyst.num_analysts",
+    "analyst.buy_pct",
+    "analyst.hold_pct",
+    "analyst.sell_pct",
+    "analyst.target_mean",
+    "analyst.target_low",
+    "analyst.target_high",
+    "analyst.upside_pct"
+  ],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

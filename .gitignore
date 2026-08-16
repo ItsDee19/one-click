@@ -1,0 +1,7 @@
+# secrets — never commit
+.env
+
+# runtime artefacts
+signals.db
+__pycache__/
+*.pyc

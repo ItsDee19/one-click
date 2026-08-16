@@ -1,0 +1,83 @@
+{
+  "symbol": "TCS",
+  "ticker": "TCS.NS",
+  "name": "Tata Consultancy Services",
+  "cap_segment": "large",
+  "sector": "Information Technology",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 3210.4,
+    "day_open": 3190.0,
+    "day_high": 3224.9,
+    "day_low": 3184.2,
+    "prev_close": 3186.55,
+    "day_change_pct": 0.75,
+    "volume": 3910000
+  },
+  "range_52w": {
+    "high": 4592.25,
+    "low": 3056.05,
+    "pct_from_high": -30.09,
+    "position_pct": 10.05
+  },
+  "technicals": {
+    "rvol": 1.32,
+    "price_vs_sma_pct": 1.4,
+    "sma_period": 20,
+    "window_return_pct": 1.9,
+    "swing_high": 3260.8,
+    "swing_low": 3081.2,
+    "day_range_position_pct": 64.37,
+    "trend": "sideways"
+  },
+  "analyst": {
+    "consensus": "hold",
+    "num_analysts": 42,
+    "buy_pct": 52.4,
+    "hold_pct": 38.1,
+    "sell_pct": 9.5,
+    "target_mean": 3620.0,
+    "target_low": 2900.0,
+    "target_high": 4100.0,
+    "upside_pct": 12.76
+  },
+  "news": {
+    "total": 4,
+    "positive": 1,
+    "negative": 1,
+    "neutral": 2,
+    "net_tone": 0,
+    "recent": [
+      {
+        "title": "IT major recovers modestly from recent lows",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Discretionary spending recovery still described as slow",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Deal wins announced across two verticals",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      },
+      {
+        "title": "Sector consensus stays split on the near term",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "symbol": "DIXON",
+  "ticker": "DIXON.NS",
+  "name": "Dixon Technologies",
+  "cap_segment": "mid",
+  "sector": "Electronics Manufacturing",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 18450.0,
+    "day_open": 17800.0,
+    "day_high": 18520.0,
+    "day_low": 17755.0,
+    "prev_close": 17720.5,
+    "day_change_pct": 4.12,
+    "volume": 1842000
+  },
+  "range_52w": {
+    "high": 19148.9,
+    "low": 9000.0,
+    "pct_from_high": -3.65,
+    "position_pct": 93.11
+  },
+  "technicals": {
+    "rvol": 3.4,
+    "price_vs_sma_pct": 8.6,
+    "sma_period": 20,
+    "window_return_pct": 12.4,
+    "swing_high": 18520.0,
+    "swing_low": 15980.0,
+    "day_range_position_pct": 90.85,
+    "trend": "up"
+  },
+  "analyst": {
+    "consensus": "buy",
+    "num_analysts": 28,
+    "buy_pct": 60.7,
+    "hold_pct": 17.9,
+    "sell_pct": 21.4,
+    "target_mean": 20100.0,
+    "target_low": 12500.0,
+    "target_high": 24500.0,
+    "upside_pct": 8.94
+  },
+  "news": {
+    "total": 5,
+    "positive": 3,
+    "negative": 1,
+    "neutral": 1,
+    "net_tone": 2,
+    "recent": [
+      {
+        "title": "Contract manufacturer extends record run as order book expands",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Brokerages raise target after strong quarterly delivery",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Volumes surge to a multi-week high in the counter",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Valuation premium keeps some analysts on the sidelines",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Sector peers also trade firm through the session",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

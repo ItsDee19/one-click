@@ -1,0 +1,89 @@
+{
+  "symbol": "KPITTECH",
+  "ticker": "KPITTECH.NS",
+  "name": "KPIT Technologies",
+  "cap_segment": "small",
+  "sector": "Auto Software",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 1548.6,
+    "day_open": 1502.0,
+    "day_high": 1556.4,
+    "day_low": 1499.1,
+    "prev_close": 1497.2,
+    "day_change_pct": 3.43,
+    "volume": 4120500
+  },
+  "range_52w": {
+    "high": 1980.0,
+    "low": 1080.0,
+    "pct_from_high": -21.79,
+    "position_pct": 52.07
+  },
+  "technicals": {
+    "rvol": 2.9,
+    "price_vs_sma_pct": 4.2,
+    "sma_period": 20,
+    "window_return_pct": 6.8,
+    "swing_high": 1556.4,
+    "swing_low": 1402.5,
+    "day_range_position_pct": 86.39,
+    "trend": "up"
+  },
+  "analyst": {
+    "consensus": "buy",
+    "num_analysts": 21,
+    "buy_pct": 71.4,
+    "hold_pct": 19.1,
+    "sell_pct": 9.5,
+    "target_mean": 1790.0,
+    "target_low": 1250.0,
+    "target_high": 2150.0,
+    "upside_pct": 15.59
+  },
+  "news": {
+    "total": 5,
+    "positive": 2,
+    "negative": 1,
+    "neutral": 2,
+    "net_tone": 1,
+    "recent": [
+      {
+        "title": "Engineering services firm gains on new client win",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Order pipeline described as healthy into the second half",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Stock still well below its 52-week high",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Auto software demand commentary stays steady",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      },
+      {
+        "title": "Mid-tier IT names trade firm",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

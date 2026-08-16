@@ -1,0 +1,89 @@
+{
+  "symbol": "INFY",
+  "ticker": "INFY.NS",
+  "name": "Infosys",
+  "cap_segment": "large",
+  "sector": "Information Technology",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 1502.6,
+    "day_open": 1518.0,
+    "day_high": 1521.4,
+    "day_low": 1496.8,
+    "prev_close": 1519.3,
+    "day_change_pct": -1.1,
+    "volume": 6720000
+  },
+  "range_52w": {
+    "high": 2006.45,
+    "low": 1307.0,
+    "pct_from_high": -25.11,
+    "position_pct": 27.96
+  },
+  "technicals": {
+    "rvol": 1.08,
+    "price_vs_sma_pct": -2.6,
+    "sma_period": 20,
+    "window_return_pct": -3.4,
+    "swing_high": 1580.2,
+    "swing_low": 1489.5,
+    "day_range_position_pct": 23.58,
+    "trend": "down"
+  },
+  "analyst": {
+    "consensus": "buy",
+    "num_analysts": 44,
+    "buy_pct": 61.4,
+    "hold_pct": 29.5,
+    "sell_pct": 9.1,
+    "target_mean": 1720.0,
+    "target_low": 1350.0,
+    "target_high": 2050.0,
+    "upside_pct": 14.47
+  },
+  "news": {
+    "total": 5,
+    "positive": 1,
+    "negative": 2,
+    "neutral": 2,
+    "net_tone": -1,
+    "recent": [
+      {
+        "title": "IT major slips as the sector loses ground",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Guidance range left unchanged",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      },
+      {
+        "title": "Large deal announced in the financial services vertical",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Attrition commentary described as stable",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      },
+      {
+        "title": "Brokerage trims its near-term estimates",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

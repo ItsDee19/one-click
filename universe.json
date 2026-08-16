@@ -1,0 +1,41 @@
+{
+  "_comment": "Editable NSE universe. Tickers must end in .NS for yfinance. Buckets are scanned independently and the top SHORTLIST_PER_BUCKET movers from each go to debate.",
+  "large": [
+    { "ticker": "RELIANCE.NS", "name": "Reliance Industries", "sector": "Energy / Conglomerate" },
+    { "ticker": "TCS.NS", "name": "Tata Consultancy Services", "sector": "Information Technology" },
+    { "ticker": "HDFCBANK.NS", "name": "HDFC Bank", "sector": "Banking" },
+    { "ticker": "INFY.NS", "name": "Infosys", "sector": "Information Technology" },
+    { "ticker": "ICICIBANK.NS", "name": "ICICI Bank", "sector": "Banking" },
+    { "ticker": "LT.NS", "name": "Larsen & Toubro", "sector": "Capital Goods" },
+    { "ticker": "BHARTIARTL.NS", "name": "Bharti Airtel", "sector": "Telecom" },
+    { "ticker": "TMPV.NS", "name": "Tata Motors Passenger Vehicles", "sector": "Automobile" },
+    { "ticker": "SBIN.NS", "name": "State Bank of India", "sector": "Banking" },
+    { "ticker": "AXISBANK.NS", "name": "Axis Bank", "sector": "Banking" },
+    { "ticker": "SUNPHARMA.NS", "name": "Sun Pharmaceutical", "sector": "Pharmaceuticals" },
+    { "ticker": "TITAN.NS", "name": "Titan Company", "sector": "Consumer Discretionary" }
+  ],
+  "mid": [
+    { "ticker": "DIXON.NS", "name": "Dixon Technologies", "sector": "Electronics Manufacturing" },
+    { "ticker": "PERSISTENT.NS", "name": "Persistent Systems", "sector": "Information Technology" },
+    { "ticker": "POLYCAB.NS", "name": "Polycab India", "sector": "Electricals" },
+    { "ticker": "TATAELXSI.NS", "name": "Tata Elxsi", "sector": "Design & Technology" },
+    { "ticker": "ASTRAL.NS", "name": "Astral Ltd", "sector": "Building Materials" },
+    { "ticker": "COFORGE.NS", "name": "Coforge", "sector": "Information Technology" },
+    { "ticker": "MUTHOOTFIN.NS", "name": "Muthoot Finance", "sector": "NBFC" },
+    { "ticker": "PIIND.NS", "name": "PI Industries", "sector": "Agrochemicals" },
+    { "ticker": "SUPREMEIND.NS", "name": "Supreme Industries", "sector": "Plastics" },
+    { "ticker": "BSE.NS", "name": "BSE Ltd", "sector": "Capital Markets" }
+  ],
+  "small": [
+    { "ticker": "KPITTECH.NS", "name": "KPIT Technologies", "sector": "Auto Software" },
+    { "ticker": "CDSL.NS", "name": "Central Depository Services", "sector": "Capital Markets" },
+    { "ticker": "AMBER.NS", "name": "Amber Enterprises", "sector": "Consumer Durables" },
+    { "ticker": "CAMS.NS", "name": "Computer Age Management", "sector": "Financial Services" },
+    { "ticker": "ANGELONE.NS", "name": "Angel One", "sector": "Broking" },
+    { "ticker": "RAINBOW.NS", "name": "Rainbow Children's Medicare", "sector": "Healthcare" },
+    { "ticker": "ERIS.NS", "name": "Eris Lifesciences", "sector": "Pharmaceuticals" },
+    { "ticker": "NEWGEN.NS", "name": "Newgen Software", "sector": "Information Technology" },
+    { "ticker": "GRAVITA.NS", "name": "Gravita India", "sector": "Recycling" },
+    { "ticker": "TRIVENI.NS", "name": "Triveni Turbine", "sector": "Capital Goods" }
+  ]
+}

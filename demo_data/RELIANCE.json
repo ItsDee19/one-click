@@ -1,0 +1,95 @@
+{
+  "symbol": "RELIANCE",
+  "ticker": "RELIANCE.NS",
+  "name": "Reliance Industries",
+  "cap_segment": "large",
+  "sector": "Energy / Conglomerate",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 1402.3,
+    "day_open": 1391.0,
+    "day_high": 1409.8,
+    "day_low": 1387.2,
+    "prev_close": 1389.6,
+    "day_change_pct": 0.91,
+    "volume": 9845000
+  },
+  "range_52w": {
+    "high": 1608.8,
+    "low": 1114.85,
+    "pct_from_high": -12.84,
+    "position_pct": 58.19
+  },
+  "technicals": {
+    "rvol": 1.15,
+    "price_vs_sma_pct": 2.1,
+    "sma_period": 20,
+    "window_return_pct": 3.6,
+    "swing_high": 1409.8,
+    "swing_low": 1338.4,
+    "day_range_position_pct": 66.81,
+    "trend": "up"
+  },
+  "analyst": {
+    "consensus": "buy",
+    "num_analysts": 34,
+    "buy_pct": 82.4,
+    "hold_pct": 14.7,
+    "sell_pct": 2.9,
+    "target_mean": 1620.0,
+    "target_low": 1310.0,
+    "target_high": 1840.0,
+    "upside_pct": 15.52
+  },
+  "news": {
+    "total": 6,
+    "positive": 2,
+    "negative": 2,
+    "neutral": 2,
+    "net_tone": 0,
+    "recent": [
+      {
+        "title": "Conglomerate edges higher in a quiet session",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Retail arm expansion plans reiterated",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Refining margin commentary turns cautious",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Telecom tariff timeline remains a question mark",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Index heavyweight tracks the broader market",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      },
+      {
+        "title": "Analyst targets left unchanged after the update",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}

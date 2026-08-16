@@ -1,0 +1,83 @@
+{
+  "symbol": "TITAN",
+  "ticker": "TITAN.NS",
+  "name": "Titan Company",
+  "cap_segment": "large",
+  "sector": "Consumer Discretionary",
+  "as_of": "12 Aug 2026, 15:32:00 IST",
+  "source": "demo",
+  "price": {
+    "live": 3358.7,
+    "day_open": 3345.0,
+    "day_high": 3372.4,
+    "day_low": 3332.8,
+    "prev_close": 3341.1,
+    "day_change_pct": 0.53,
+    "volume": 1240000
+  },
+  "range_52w": {
+    "high": 3867.0,
+    "low": 2925.1,
+    "pct_from_high": -13.14,
+    "position_pct": 46.03
+  },
+  "technicals": {
+    "rvol": 0.88,
+    "price_vs_sma_pct": 0.9,
+    "sma_period": 20,
+    "window_return_pct": 1.2,
+    "swing_high": 3372.4,
+    "swing_low": 3240.6,
+    "day_range_position_pct": 65.4,
+    "trend": "sideways"
+  },
+  "analyst": {
+    "consensus": "buy",
+    "num_analysts": 33,
+    "buy_pct": 63.6,
+    "hold_pct": 27.3,
+    "sell_pct": 9.1,
+    "target_mean": 3720.0,
+    "target_low": 3000.0,
+    "target_high": 4200.0,
+    "upside_pct": 10.76
+  },
+  "news": {
+    "total": 4,
+    "positive": 1,
+    "negative": 2,
+    "neutral": 1,
+    "net_tone": -1,
+    "recent": [
+      {
+        "title": "Jewellery retailer holds steady in thin volume",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "neutral"
+      },
+      {
+        "title": "Gold price volatility weighs on margin outlook",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      },
+      {
+        "title": "Store additions tracking to plan",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "positive"
+      },
+      {
+        "title": "Festive demand commentary described as a risk",
+        "publisher": "demo feed",
+        "published": "12 Aug 2026, 15:32:00 IST",
+        "sentiment": "negative"
+      }
+    ]
+  },
+  "data_gaps": [],
+  "notes": [
+    "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). The fundamental view is limited to sell-side analyst targets and consensus.",
+    "Static offline demo bundle for a real NSE ticker. Figures are illustrative, not a live market capture — run capture_demo.py during market hours to replace this file with a genuine snapshot."
+  ]
+}
