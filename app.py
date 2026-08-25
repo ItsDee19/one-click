@@ -28,6 +28,8 @@ import data_sources
 import history
 import llm
 import market
+import portfolio
+import research
 import scheduler as scheduler_mod
 import scoring
 
@@ -91,6 +93,35 @@ def env_float(key, default):
 
 BRAND = env_str("BRAND", "Dalal Desk")
 PORT = env_int("PORT", 5000)
+
+
+def risk_limits():
+    """The paper account's rules, rebuilt each run so .env edits take effect."""
+    return portfolio.RiskLimits(
+        capital=env_float("PAPER_CAPITAL", 100000),
+        risk_per_trade_pct=env_float("RISK_PER_TRADE_PCT", 1.0),
+        max_position_pct=env_float("MAX_POSITION_PCT", 20.0),
+        max_concurrent=env_int("MAX_CONCURRENT_POSITIONS", 5),
+        max_daily_loss_pct=env_float("MAX_DAILY_LOSS_PCT", 3.0),
+        max_daily_trades=env_int("MAX_DAILY_TRADES", 6),
+        max_sector_pct=env_float("MAX_SECTOR_PCT", 40.0),
+        cash_reserve_pct=env_float("CASH_RESERVE_PCT", 20.0),
+        slippage_pct=env_float("SLIPPAGE_PCT", 0.05),
+    )
+
+
+def paper_enabled(mode=None):
+    """
+    Paper trading is only meaningful against real prices.
+
+    Demo bundles carry frozen, illustrative figures, so a position "opened" at
+    a demo price and then marked against the live tape produces a P&L that
+    measures nothing but the gap between the two. Demo mode still produces
+    verdicts and sizing previews; it just does not book them.
+    """
+    if env_str("PAPER_TRADING", "1") in ("0", "false", "no"):
+        return False
+    return mode != "demo"
 
 
 def scrub(text) -> str:
@@ -161,6 +192,7 @@ def fresh_state():
         "calibration": {},
         "calibration_line": "",
         "concentration": None,
+        "portfolio": {},
         "agents": fresh_agents(),
         "verdicts": [],
         "log": [],
@@ -290,6 +322,7 @@ def init_db():
             """
         )
         history.init(conn)
+        portfolio.init(conn)
 
 
 def db_start_run(mode, engine):
@@ -519,6 +552,58 @@ def _bars_since(ticker, since_iso):
     return bars
 
 
+def _quotes_for(symbols):
+    """Current price/high/low for open paper positions."""
+    if not symbols:
+        return {}
+    try:
+        import yfinance as yf
+        tickers = [f"{s}.NS" for s in symbols]
+        frame = yf.download(" ".join(tickers), period="1d", interval="5m",
+                            group_by="ticker", progress=False, threads=True,
+                            auto_adjust=False, actions=False)
+    except Exception as exc:                                       # noqa: BLE001
+        log(f"paper: could not refresh prices ({type(exc).__name__})")
+        return {}
+
+    phase = market.describe()
+    out = {}
+    for symbol, ticker in zip(symbols, tickers):
+        try:
+            bars = frame[ticker] if len(tickers) > 1 else frame
+            closes = [c for c in bars["Close"].tolist() if c == c]
+            highs = [h for h in bars["High"].tolist() if h == h]
+            lows = [l for l in bars["Low"].tolist() if l == l]
+        except Exception:                                          # noqa: BLE001
+            continue
+        if not closes:
+            continue
+        out[symbol] = {"price": round(float(closes[-1]), 2),
+                       "high": round(float(max(highs)), 2) if highs else None,
+                       "low": round(float(min(lows)), 2) if lows else None,
+                       "live_session": phase["live_session"]}
+    return out
+
+
+def mark_paper_book(limits, mode=None):
+    """Settle stops, targets and session exits before anything new is opened."""
+    if not paper_enabled(mode):
+        return {}
+    try:
+        with db() as conn:
+            live = portfolio.open_positions(conn)
+            quotes = _quotes_for(sorted({p["symbol"] for p in live}))
+            result = portfolio.mark_to_market(conn, limits, quotes, log=log)
+            summary = portfolio.account_summary(conn, limits, quotes)
+        if result.get("closed"):
+            log(f"paper: {result['closed']} position(s) closed, "
+                f"realised Rs {result['realised']:,.0f} this pass")
+        return summary
+    except Exception as exc:                                       # noqa: BLE001
+        log(f"paper book skipped ({type(exc).__name__}: {scrub(exc)})")
+        return {}
+
+
 def review_outcomes():
     """
     Settle every open signal before a new run judges anything.
@@ -652,7 +737,20 @@ def run_cycle(mode):
         log(f"run #{run_id} started · mode={mode} · engine={engine_label} "
             f"({provider.get('reason')}) · BUY threshold {threshold}/10")
 
-        # settle yesterday's calls before making today's
+        # settle yesterday's calls, and the paper book, before making today's
+        limits = risk_limits()
+        if mode == "demo" and env_str("PAPER_TRADING", "1") not in ("0", "false", "no"):
+            log("paper trading idle in demo mode — demo prices are frozen, so a "
+                "simulated fill against them would measure nothing. Use live mode.")
+        book = mark_paper_book(limits, mode)
+        if book:
+            with LOCK:
+                STATE["portfolio"] = book
+            log(f"paper account: equity Rs {book['equity']:,.0f} "
+                f"({book['total_return_pct']:+.2f}%), {len(book['open_positions'])} open, "
+                f"day P&L Rs {book['day_pnl']:,.0f}"
+                + (f" — HALTED: {book['halted']['reason']}" if book.get("halted") else ""))
+
         board = review_outcomes()
         board_line = history.scoreboard_line(board) if board else ""
         try:
@@ -732,6 +830,27 @@ def run_cycle(mode):
         # ---- Newsdesk ------------------------------------------------------
         set_agent("newsdesk", status="working")
         headlines, tone = 0, 0
+        web_on = env_str("WEB_RESEARCH", "1") not in ("0", "false", "no")
+
+        if web_on:
+            # Public RSS, sanitised. Everything fetched is treated as data:
+            # research.gather strips instruction-like text and flags it.
+            stripped = 0
+            for bundle in shortlist:
+                try:
+                    web = research.gather(bundle["symbol"], bundle.get("name") or bundle["symbol"],
+                                          data_sources.score_headline, log=log)
+                    bundle["news"] = research.merge_into_news(bundle.get("news") or {}, web)
+                    bundle["web_research"] = {
+                        "source": web["source"], "trust": web["trust"],
+                        "fetched_at": web["fetched_at"], "added": bundle["news"].get("web_added", 0),
+                    }
+                    stripped += web.get("injection_attempts_stripped", 0)
+                except Exception as exc:                           # noqa: BLE001
+                    log(f"research: {bundle['symbol']} skipped ({type(exc).__name__})")
+            log(f"newsdesk pulled public RSS for {len(shortlist)} names"
+                + (f" — {stripped} instruction-like pattern(s) stripped" if stripped else ""))
+
         for bundle in shortlist:
             news = bundle.get("news") or {}
             headlines += int(news.get("total") or 0)
@@ -816,7 +935,23 @@ def run_cycle(mode):
 
             with LOCK:
                 STATE["verdicts"].insert(0, _public_verdict(row))
-            db_save_verdict(run_id, row)
+            verdict_ids = db_save_verdict(run_id, row)
+
+            # A fired signal becomes a simulated position, subject to every
+            # risk gate. No real order is placed — see portfolio.py.
+            if paper_enabled(mode):
+                for name, track in row["tracks"].items():
+                    if not track.get("fired"):
+                        continue
+                    try:
+                        with db() as conn:
+                            outcome = portfolio.open_paper_position(
+                                conn, limits, run_id, verdict_ids.get(name),
+                                row, name, track, log=log)
+                        track["paper"] = outcome
+                    except Exception as exc:                       # noqa: BLE001
+                        log(f"paper: {row['symbol']} sizing failed "
+                            f"({type(exc).__name__}: {scrub(exc)})")
 
             set_agent("judge", stat1=index, stat2=buys)
             set_kpi(buy_signals=len(_fired(rows)),
@@ -879,6 +1014,14 @@ def run_cycle(mode):
             }
 
         # ---- close out -------------------------------------------------------
+        if paper_enabled(mode):
+            try:
+                with db() as conn:
+                    with LOCK:
+                        STATE["portfolio"] = portfolio.account_summary(conn, limits)
+            except Exception:                                      # noqa: BLE001
+                pass
+
         top = _top_pick(rows)
         set_kpi(buy_signals=len(fired), top_pick=top,
                 intraday_signals=len(_fired(rows, "intraday")),
@@ -1025,6 +1168,10 @@ def config():
         "tracks": list(scoring.TRACKS),
         "scheduler": SCHEDULER.status() if SCHEDULER else {"enabled": False},
         "signal_cooldown_days": env_int("SIGNAL_COOLDOWN_DAYS", 5),
+        "paper_trading": paper_enabled(),
+        "web_research": env_str("WEB_RESEARCH", "1") not in ("0", "false", "no"),
+        "risk": risk_limits().as_dict(),
+        "executes_orders": False,
     })
 
 
@@ -1069,6 +1216,32 @@ def start():
 @app.get("/scheduler")
 def scheduler_status():
     return jsonify(SCHEDULER.status() if SCHEDULER else {"enabled": False})
+
+
+@app.get("/portfolio")
+def portfolio_route():
+    """The paper account. No real positions exist; nothing here is executable."""
+    limits = risk_limits()
+    try:
+        with db() as conn:
+            live = portfolio.open_positions(conn)
+            quotes = _quotes_for(sorted({p["symbol"] for p in live})) if live else {}
+            summary = portfolio.account_summary(conn, limits, quotes)
+            closed = [dict(r) for r in conn.execute(
+                """SELECT symbol, track, qty, fill_price, exit_price, exit_reason,
+                          gross_pnl, costs, net_pnl, net_pnl_pct, opened_at, closed_at
+                   FROM paper_positions WHERE status='closed'
+                   ORDER BY closed_at DESC LIMIT 30""")]
+    except Exception as exc:                                       # noqa: BLE001
+        return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
+
+    summary["closed"] = closed
+    summary["mode"] = ("paper" if env_str("PAPER_TRADING", "1")
+                       not in ("0", "false", "no") else "disabled")
+    summary["books_trades_in"] = "live mode only"
+    summary["disclaimer"] = ("Simulated account. No broker is connected and no "
+                             "real order is ever placed.")
+    return jsonify(summary)
 
 
 @app.get("/scoreboard")
