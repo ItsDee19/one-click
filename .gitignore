@@ -5,3 +5,7 @@
 signals.db
 __pycache__/
 *.pyc
+
+# local run logs
+server.log
+server.err

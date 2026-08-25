@@ -26,6 +26,8 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 
+import market
+
 # --------------------------------------------------------------------------
 # constants
 # --------------------------------------------------------------------------
@@ -36,6 +38,9 @@ UNIVERSE_FILE = os.path.join(HERE, "universe.json")
 
 SMA_PERIOD = 20            # N-day simple moving average used for price_vs_sma_pct
 HISTORY_PERIOD = "1mo"     # ~1 month of daily OHLC
+INTRADAY_INTERVAL = "5m"   # granularity for VWAP / opening range
+OPENING_RANGE_BARS = 3     # first 3 x 5m bars = the 09:15-09:30 opening range
+ATR_PERIOD = 14
 IST = timezone(timedelta(hours=5, minutes=30))
 
 BUCKETS = ("large", "mid", "small")
@@ -136,6 +141,32 @@ def score_headline(title: str) -> str:
     return "neutral"
 
 
+def _empty_intraday(reason):
+    """
+    The intraday block when there is no session behind it.
+
+    `available: False` is a first-class state, not a data gap: at 09:00 there
+    is genuinely nothing to measure yet, and the agents are told to say so
+    rather than reach for yesterday's numbers.
+    """
+    return {
+        "available": False,
+        "reason": reason,
+        "bars": 0,
+        "gap_pct": None,
+        "opening_range_high": None,
+        "opening_range_low": None,
+        "opening_range_pct": None,
+        "above_opening_range": None,
+        "vwap": None,
+        "price_vs_vwap_pct": None,
+        "session_volume": None,
+        "session_high": None,
+        "session_low": None,
+        "last_bar": None,
+    }
+
+
 def _empty_evidence(symbol, name, ticker, bucket, sector):
     """Skeleton with every field None, so a partial build is still well-formed."""
     return {
@@ -152,10 +183,13 @@ def _empty_evidence(symbol, name, ticker, bucket, sector):
         },
         "range_52w": {"high": None, "low": None, "pct_from_high": None, "position_pct": None},
         "technicals": {
-            "rvol": None, "price_vs_sma_pct": None, "sma_period": SMA_PERIOD,
+            "rvol": None, "rvol_raw": None, "rvol_method": None,
+            "price_vs_sma_pct": None, "sma_period": SMA_PERIOD,
             "window_return_pct": None, "swing_high": None, "swing_low": None,
-            "day_range_position_pct": None, "trend": None,
+            "day_range_position_pct": None, "trend": None, "atr_pct": None,
         },
+        "intraday": _empty_intraday("not built"),
+        "market": market.describe(),
         "analyst": {
             "consensus": None, "num_analysts": None, "buy_pct": None, "hold_pct": None,
             "sell_pct": None, "target_mean": None, "target_low": None,
@@ -174,8 +208,8 @@ def _finalise_gaps(evidence: dict) -> dict:
 
     def walk(prefix, node):
         for key, value in node.items():
-            if key in ("recent", "sma_period"):
-                continue
+            if key in ("recent", "sma_period", "rvol_method", "rvol_raw"):
+                continue   # metadata about a measurement, not a measurement
             path = f"{prefix}.{key}" if prefix else key
             if isinstance(value, dict):
                 walk(path, value)
@@ -212,6 +246,11 @@ def load_demo_bundles(demo_dir: str = DEMO_DIR) -> list:
         bundle.setdefault("source", "demo")
         bundle.setdefault("notes", [NO_RATIOS_NOTE])
         bundle.setdefault("data_gaps", [])
+        # A frozen bundle has no live session behind it, so the intraday track
+        # is honestly unavailable rather than replayed from a stale snapshot.
+        bundle.setdefault("intraday", _empty_intraday(
+            "demo bundle — a frozen snapshot has no live session to read"))
+        bundle.setdefault("market", market.describe())
         bundles.append(_finalise_gaps(bundle))
     bundles.sort(key=lambda b: b["symbol"])
     return bundles
@@ -382,8 +421,13 @@ def build_evidence_live(quote: dict, log=None) -> dict:
         "pct_from_high": _round(pct_from_high), "position_pct": _round(position),
     }
 
-    # ---- technicals ------------------------------------------------------
-    ev["technicals"].update(_technicals(closes, highs, lows, volumes, live, ev["price"]))
+    # ---- market phase, technicals, intraday -------------------------------
+    phase_info = market.describe(market_state=info.get("marketState"))
+    ev["market"] = phase_info
+    ev["technicals"].update(_technicals(closes, highs, lows, volumes, live,
+                                        ev["price"], phase_info["session_fraction"]))
+    ev["intraday"] = build_intraday(quote.get("intraday_frame"),
+                                    ev["price"]["prev_close"], live, phase_info)
 
     # ---- analyst ---------------------------------------------------------
     target_mean = _clean(info.get("targetMeanPrice"))
@@ -408,21 +452,49 @@ def build_evidence_live(quote: dict, log=None) -> dict:
     return _finalise_gaps(ev)
 
 
-def _technicals(closes, highs, lows, volumes, live, price_block) -> dict:
+def _technicals(closes, highs, lows, volumes, live, price_block,
+                session_fraction=1.0) -> dict:
     """RVOL, SMA distance, window return, swings, day-range position, trend."""
     out = {
-        "rvol": None, "price_vs_sma_pct": None, "sma_period": SMA_PERIOD,
+        "rvol": None, "rvol_raw": None, "rvol_method": None,
+        "price_vs_sma_pct": None, "sma_period": SMA_PERIOD,
         "window_return_pct": None, "swing_high": None, "swing_low": None,
-        "day_range_position_pct": None, "trend": None,
+        "day_range_position_pct": None, "trend": None, "atr_pct": None,
     }
 
     ref = live if live is not None else (closes[-1] if closes else None)
 
-    # relative volume: today vs the average of every *prior* day in the window
+    # Relative volume: today against the average of every *prior* day.
+    #
+    # Mid-session this needs scaling. Two hours into a six-and-a-quarter hour
+    # day, a stock trading exactly its normal volume has only printed a third
+    # of it — comparing that with a full-day average makes every stock look
+    # dead. We divide the benchmark by the fraction of the session elapsed and
+    # keep the unscaled figure alongside it so nothing is hidden.
     if len(volumes) >= 3:
         prior = [v for v in volumes[:-1] if v > 0]
         if prior and volumes[-1] > 0:
-            out["rvol"] = _round(volumes[-1] / (sum(prior) / len(prior)))
+            average = sum(prior) / len(prior)
+            raw = volumes[-1] / average
+            divisor = market.volume_divisor(session_fraction)
+            out["rvol_raw"] = _round(raw)
+            out["rvol"] = _round(raw / divisor)
+            out["rvol_method"] = (
+                "full session" if divisor >= 0.999
+                else f"scaled to {round(divisor * 100)}% of session elapsed"
+            )
+
+    # Average true range over the daily window, as a % of price — the unit the
+    # positional track uses to turn "distance to target" into "how long".
+    if len(closes) >= 3 and len(highs) == len(lows) == len(closes):
+        trs = []
+        for i in range(1, len(closes)):
+            trs.append(max(highs[i] - lows[i],
+                           abs(highs[i] - closes[i - 1]),
+                           abs(lows[i] - closes[i - 1])))
+        window = trs[-ATR_PERIOD:]
+        if window and ref:
+            out["atr_pct"] = _round(sum(window) / len(window) / ref * 100.0)
 
     sma = None
     if closes:
@@ -462,6 +534,106 @@ def _technicals(closes, highs, lows, volumes, live, price_block) -> dict:
         out["trend"] = "sideways"
 
     return out
+
+
+def build_intraday(frame, prev_close, live, phase_info) -> dict:
+    """
+    Today's session shape from 5-minute bars: gap, opening range, VWAP.
+
+    Returns `available: False` with a stated reason whenever there is no
+    session to read — before the open, on a holiday, or when the feed simply
+    did not return bars. Nothing here is ever back-filled from yesterday.
+    """
+    if not phase_info.get("live_session") and phase_info.get("phase") != market.POST:
+        return _empty_intraday(
+            f"no live session — {phase_info.get('label', 'market closed')}")
+
+    if frame is None or getattr(frame, "empty", True):
+        return _empty_intraday("feed returned no intraday bars for today")
+
+    opens = _series_values(frame, "Open")
+    highs = _series_values(frame, "High")
+    lows = _series_values(frame, "Low")
+    closes = _series_values(frame, "Close")
+    volumes = _series_values(frame, "Volume")
+
+    if not closes or not volumes:
+        return _empty_intraday("intraday bars carried no usable prices")
+
+    out = _empty_intraday("")
+    out["available"] = True
+    out["reason"] = ""
+    out["bars"] = len(closes)
+
+    ref = live if live is not None else closes[-1]
+
+    session_open = opens[0] if opens else None
+    if session_open is not None and prev_close:
+        out["gap_pct"] = _round((session_open - prev_close) / prev_close * 100.0)
+
+    # Opening range: the first 15 minutes. Breaking it is the classic
+    # intraday continuation trigger, holding below it the classic failure.
+    take = min(OPENING_RANGE_BARS, len(highs), len(lows))
+    if take:
+        or_high = max(highs[:take])
+        or_low = min(lows[:take])
+        out["opening_range_high"] = _round(or_high)
+        out["opening_range_low"] = _round(or_low)
+        if or_low:
+            out["opening_range_pct"] = _round((or_high - or_low) / or_low * 100.0)
+        if ref is not None:
+            out["above_opening_range"] = bool(ref > or_high)
+
+    # VWAP from typical price, the reference intraday participants actually use
+    if len(closes) == len(volumes) and sum(volumes) > 0:
+        n = min(len(closes), len(highs), len(lows), len(volumes))
+        turnover = sum(((highs[i] + lows[i] + closes[i]) / 3.0) * volumes[i]
+                       for i in range(n))
+        traded = sum(volumes[:n])
+        if traded > 0:
+            vwap = turnover / traded
+            out["vwap"] = _round(vwap)
+            if ref is not None and vwap:
+                out["price_vs_vwap_pct"] = _round((ref - vwap) / vwap * 100.0)
+
+    out["session_volume"] = int(sum(volumes)) or None
+    out["session_high"] = _round(max(highs)) if highs else None
+    out["session_low"] = _round(min(lows)) if lows else None
+
+    try:
+        out["last_bar"] = str(frame.index[-1])
+    except (AttributeError, IndexError):
+        out["last_bar"] = None
+
+    return out
+
+
+def fetch_intraday(tickers, log=None):
+    """One batched 5-minute download for the shortlist. {ticker: frame}."""
+    yf = _import_yf()
+    say = log or (lambda _m: None)
+    if not tickers:
+        return {}
+
+    say(f"downloading {INTRADAY_INTERVAL} session bars for {len(tickers)} shortlisted")
+    try:
+        downloaded = yf.download(
+            tickers=" ".join(tickers),
+            period="1d",
+            interval=INTRADAY_INTERVAL,
+            group_by="ticker",
+            auto_adjust=False,
+            actions=False,
+            progress=False,
+            threads=True,
+        )
+    except Exception as exc:                                      # noqa: BLE001
+        say(f"intraday download failed ({type(exc).__name__}) — "
+            f"intraday track will report unavailable")
+        return {}
+
+    single = len(tickers) == 1
+    return {t: _frame_for(downloaded, t, single) for t in tickers}
 
 
 def _recommendation_split(handle, symbol, say) -> dict:
@@ -569,6 +741,11 @@ def scan_live(universe: dict, shortlist_per_bucket: int, log=None):
                           if q["day_change_pct"] is not None else q["ticker"].split(".")[0]
                           for q in picked))
         screened.extend(picked)
+
+    # Intraday bars cost one more request, so we only pay for it on survivors.
+    frames = fetch_intraday([q["ticker"] for q in screened], log=say)
+    for quote in screened:
+        quote["intraday_frame"] = frames.get(quote["ticker"])
 
     bundles = []
     for quote in screened:

@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 import scoring
 
@@ -33,6 +34,14 @@ SYSTEM_PROMPT = (
     "You are the standing equity panel of a small Indian-markets research desk. "
     "Six seats debate one NSE-listed stock: Bull, Bear, Fundamentals, Technicals, "
     "News, and a Judge who closes the debate.\n\n"
+    "The Judge rules TWICE, on two different questions:\n"
+    "  • INTRADAY — is there a move to trade inside today's session, closed "
+    "before the bell? This rests on the session tape only: VWAP, the opening "
+    "range, the gap, time-adjusted RVOL, position in the day's range.\n"
+    "  • POSITIONAL — is this worth holding for weeks or months? This rests on "
+    "trend, the 52-week position, analyst headroom and news.\n"
+    "The two can disagree, and often should: a stock can be extended intraday "
+    "but attractive to hold, or ripping today with no lasting case.\n\n"
     "House rules, in order of importance:\n"
     "1. GROUNDING. Every single figure you cite must appear in the evidence JSON "
     "you are given. Never estimate, never annualise, never recall a number from "
@@ -46,7 +55,14 @@ SYSTEM_PROMPT = (
     "headroom left to the target. WATCH is for a promising setup that is not yet "
     "confirmed. AVOID is for poor risk/reward. A thin or contradictory evidence "
     "bundle is a WATCH or an AVOID, never a BUY.\n"
-    "4. Be concise and specific. No hedging boilerplate, no disclaimers — the "
+    "4. INTRADAY HONESTY. If the evidence says intraday.available is false, the "
+    "session has not traded yet and there is NOTHING to read — return verdict "
+    "UNAVAILABLE for the intraday track. Never infer today's tape from "
+    "yesterday's bars. Never issue an intraday BUY without price above VWAP and "
+    "above the opening range high.\n"
+    "5. Do not state a holding period. It is computed arithmetically from the "
+    "evidence and supplied to you; reference it if useful, never invent one.\n"
+    "6. Be concise and specific. No hedging boilerplate, no disclaimers — the "
     "app adds its own.\n\n"
     "Return ONLY a JSON object. No markdown fence, no prose before or after."
 )
@@ -57,11 +73,18 @@ RESPONSE_SHAPE = """{
   "fundamentals": {"conviction": 0-100, "point": "<=25 words"},
   "technicals":   {"conviction": 0-100, "point": "<=25 words"},
   "news":         {"conviction": 0-100, "point": "<=25 words"},
-  "judge": {
+  "judge_intraday": {
+    "winner": "Bull" | "Bear",
+    "verdict": "BUY" | "WATCH" | "AVOID" | "UNAVAILABLE",
+    "confidence": 1-10,
+    "rationale": "<=2 lines, session tape only",
+    "key_catalyst": "the single fact that decided it"
+  },
+  "judge_positional": {
     "winner": "Bull" | "Bear",
     "verdict": "BUY" | "WATCH" | "AVOID",
     "confidence": 1-10,
-    "rationale": "<=2 lines",
+    "rationale": "<=2 lines, the multi-week case",
     "key_catalyst": "the single fact that decided it"
   }
 }"""
@@ -140,10 +163,38 @@ def _no_llm(reason):
 def build_prompt(evidence: dict) -> str:
     gaps = evidence.get("data_gaps") or []
     gap_line = ", ".join(gaps) if gaps else "none — every field computed"
-    trimmed = {k: v for k, v in evidence.items() if k not in ("frame",)}
+    trimmed = {k: v for k, v in evidence.items()
+               if k not in ("frame", "intraday_frame")}
+
+    # Headlines are the bulkiest part of a live bundle and the tail adds little.
+    # Keeping four keeps the prompt (and the latency) down without changing the
+    # counts the News seat is allowed to cite, which live in news.total.
+    news = trimmed.get("news")
+    if isinstance(news, dict) and isinstance(news.get("recent"), list):
+        trimmed["news"] = dict(news, recent=news["recent"][:4])
+
+    phase = evidence.get("market") or {}
+    intraday = evidence.get("intraday") or {}
+    window = scoring.holding_window(evidence)
+
+    if intraday.get("available"):
+        session_line = (
+            f"The session is LIVE and {phase.get('session_pct')}% elapsed, "
+            f"{phase.get('minutes_to_close')} minutes to the close. Intraday figures "
+            f"are real but still forming. RVOL has been scaled for time of day "
+            f"({evidence.get('technicals', {}).get('rvol_method')})."
+        )
+    else:
+        session_line = (
+            f"There is NO live session behind this bundle ({phase.get('label')}): "
+            f"{intraday.get('reason')}. The intraday track must return UNAVAILABLE."
+        )
 
     return (
         f"{SYSTEM_PROMPT}\n\n"
+        f"=== MARKET CONTEXT ===\n{session_line}\n\n"
+        f"=== HOLDING WINDOW (computed, do not restate a different one) ===\n"
+        f"{window['label']} — {window['basis']}\n\n"
         f"=== EVIDENCE BUNDLE ({evidence.get('symbol')} — "
         f"{evidence.get('name')}, {evidence.get('cap_segment')} cap) ===\n"
         f"{json.dumps(trimmed, indent=2, default=str)}\n\n"
@@ -159,9 +210,9 @@ def build_prompt(evidence: dict) -> str:
 def _timeout(env=None):
     env = env if env is not None else os.environ
     try:
-        return max(15, int(float(env.get("LLM_TIMEOUT") or 90)))
+        return max(15, int(float(env.get("LLM_TIMEOUT") or 150)))
     except (TypeError, ValueError):
-        return 90
+        return 150
 
 
 def call_claude_code(prompt: str, model: str, env=None) -> str:
@@ -175,20 +226,27 @@ def call_claude_code(prompt: str, model: str, env=None) -> str:
     if not cli:
         raise RuntimeError("claude CLI not on PATH")
 
-    argv = [cli, "-p", prompt, "--output-format", "json", "--model", model]
+    # Pass prompt via stdin rather than as a CLI argument to avoid Windows
+    # cmd.exe special-character escaping and command-line length limits.
+    argv = [cli, "-p", "--output-format", "json", "--model", model]
     if sys.platform == "win32" and cli.lower().endswith((".cmd", ".bat")):
         argv = [os.environ.get("COMSPEC", "cmd.exe"), "/c"] + argv
 
-    completed = subprocess.run(
-        argv,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=_timeout(env),
-        check=False,
-    )
+    # Run from a scratch directory. Launched inside this repo the CLI loads the
+    # project as context — slower, billed for a cache the debate never uses,
+    # and liable to answer about the codebase instead of the stock.
+    with tempfile.TemporaryDirectory(prefix="dalaldesk-") as scratch:
+        completed = subprocess.run(
+            argv,
+            input=prompt,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_timeout(env),
+            check=False,
+            cwd=scratch,
+        )
 
     if completed.returncode != 0:
         raise RuntimeError(
@@ -394,10 +452,11 @@ def verify_grounding(payload: dict, evidence: dict) -> list:
         node = payload.get(seat)
         if isinstance(node, dict) and node.get("point"):
             texts.append((f"{seat}.point", str(node["point"])))
-    judge_node = payload.get("judge") or {}
-    for field in ("rationale", "key_catalyst"):
-        if judge_node.get(field):
-            texts.append((f"judge.{field}", str(judge_node[field])))
+    for judge_key in ("judge_intraday", "judge_positional", "judge"):
+        judge_node = payload.get(judge_key) or {}
+        for field in ("rationale", "key_catalyst"):
+            if judge_node.get(field):
+                texts.append((f"{judge_key}.{field}", str(judge_node[field])))
 
     for field, text in texts:
         for token in _NUMBER_RE.findall(_LABEL_RE.sub(" ", text)):
@@ -425,31 +484,31 @@ def normalise(payload: dict, evidence: dict, engine_label: str) -> dict:
 
     scores = {name: seat(name) for name in
               ("bull", "bear", "fundamentals", "technicals", "news")}
-
-    node = payload.get("judge")
-    if not isinstance(node, dict):
-        raise RuntimeError("model response had no judge block")
-
-    verdict = str(node.get("verdict") or "").strip().upper()
-    if verdict not in ("BUY", "WATCH", "AVOID"):
-        raise RuntimeError(f"model returned an unknown verdict: {verdict!r}")
-
-    try:
-        confidence = int(round(float(node.get("confidence", 5))))
-    except (TypeError, ValueError):
-        confidence = 5
-    confidence = max(1, min(10, confidence))
-
-    winner = str(node.get("winner") or "").strip().title()
-    if winner not in ("Bull", "Bear"):
-        winner = "Bull" if scores["bull"]["score"] >= scores["bear"]["score"] else "Bear"
-
     bull_score = scores["bull"]["score"]
     bear_score = scores["bear"]["score"]
 
-    return {
-        "scores": scores,
-        "verdict": {
+    def track(key, allow_unavailable):
+        node = payload.get(key)
+        if not isinstance(node, dict):
+            raise RuntimeError(f"model response had no {key} block")
+
+        verdict = str(node.get("verdict") or "").strip().upper()
+        allowed = ("BUY", "WATCH", "AVOID") + (("UNAVAILABLE",) if allow_unavailable else ())
+        if verdict not in allowed:
+            raise RuntimeError(f"model returned an unknown verdict for {key}: {verdict!r}")
+
+        try:
+            confidence = int(round(float(node.get("confidence", 5))))
+        except (TypeError, ValueError):
+            confidence = 5
+        confidence = max(1, min(10, confidence))
+
+        winner = str(node.get("winner") or "").strip().title()
+        if winner not in ("Bull", "Bear"):
+            winner = "Bull" if bull_score >= bear_score else "Bear"
+
+        return {
+            "track": key.replace("judge_", ""),
             "winner": winner,
             "verdict": verdict,
             "confidence": confidence,
@@ -459,10 +518,87 @@ def normalise(payload: dict, evidence: dict, engine_label: str) -> dict:
             "bull_score": bull_score,
             "bear_score": bear_score,
             "net": bull_score - bear_score,
-        },
+        }
+
+    positional = track("judge_positional", allow_unavailable=False)
+    intraday = track("judge_intraday", allow_unavailable=True)
+
+    # ---- horizon is arithmetic, never opinion ----------------------------
+    window = scoring.holding_window(evidence)
+    positional.update({
+        "horizon": window["label"],
+        "horizon_days_min": window["days_min"],
+        "horizon_days_max": window["days_max"],
+        "horizon_basis": window["basis"],
+        "levels": scoring._positional_levels(evidence),
+    })
+
+    intraday = _gate_intraday(intraday, evidence)
+
+    return {
+        "scores": scores,
+        "tracks": {"positional": positional, "intraday": intraday},
         "engine": engine_label,
         "ungrounded_numbers": verify_grounding(payload, evidence),
     }
+
+
+def _gate_intraday(intraday: dict, evidence: dict) -> dict:
+    """
+    Deterministic guard rails the model cannot argue its way past.
+
+    A language model can be talked into an intraday BUY by a persuasive-looking
+    tape. These three conditions are structural, so they are enforced in code
+    rather than left to the prompt:
+
+      * no live session  -> UNAVAILABLE, always
+      * not above VWAP and the opening range -> cannot be a BUY
+      * too little of the session left to work -> cannot be a BUY
+    """
+    block = evidence.get("intraday") or {}
+    phase = evidence.get("market") or {}
+
+    if not block.get("available"):
+        return scoring._intraday_unavailable(
+            block.get("reason") or "no intraday session data", evidence)
+
+    intraday.setdefault("levels", scoring._intraday_levels(evidence))
+    minutes_left = phase.get("minutes_to_close") or 0
+    intraday["minutes_to_close"] = minutes_left
+    intraday["horizon"] = (f"same session — {minutes_left} min to close"
+                           if minutes_left else "same session")
+    intraday["horizon_days_min"] = 0
+    intraday["horizon_days_max"] = 0
+    intraday["horizon_basis"] = "intraday positions are closed before the bell by definition"
+
+    if intraday["verdict"] != "BUY":
+        return intraday
+
+    above_vwap = (evidence.get("intraday", {}).get("price_vs_vwap_pct") or 0) > 0
+    above_or = block.get("above_opening_range") is True
+    rvol = (evidence.get("technicals") or {}).get("rvol")
+    rvol_ok = rvol is not None and rvol >= scoring.INTRADAY_MIN_RVOL
+
+    blockers = []
+    if not above_vwap:
+        blockers.append("price is not above VWAP")
+    if not above_or:
+        blockers.append("the opening range high is not cleared")
+    if not rvol_ok:
+        blockers.append(f"RVOL {rvol}x is under {scoring.INTRADAY_MIN_RVOL}x")
+    if minutes_left < scoring.INTRADAY_MIN_MINUTES_LEFT:
+        blockers.append(f"only {minutes_left} minutes remain in the session")
+
+    if blockers:
+        intraday["verdict"] = "WATCH"
+        intraday["confidence"] = min(6, intraday["confidence"])
+        intraday["rationale"] = (
+            f"Panel argued a BUY, held back to WATCH by the desk rules: "
+            f"{'; '.join(blockers)}. Original read: {intraday['rationale']}"
+        )
+        intraday["gated"] = True
+
+    return intraday
 
 
 # --------------------------------------------------------------------------

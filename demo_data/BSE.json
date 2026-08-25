@@ -23,13 +23,16 @@
   },
   "technicals": {
     "rvol": 2.6,
+    "rvol_raw": 2.6,
+    "rvol_method": "full session (frozen demo snapshot)",
     "price_vs_sma_pct": 9.8,
     "sma_period": 20,
     "window_return_pct": 14.2,
     "swing_high": 2912.8,
     "swing_low": 2480.6,
     "day_range_position_pct": 87.91,
-    "trend": "up"
+    "trend": "up",
+    "atr_pct": 5.23
   },
   "analyst": {
     "consensus": "buy",

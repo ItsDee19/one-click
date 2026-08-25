@@ -117,9 +117,12 @@ Every stock becomes one normalised bundle, and both engines see only this:
 
 - `price` — live, day open/high/low, prev close, day change %, volume
 - `range_52w` — high, low, % from high, position in range
-- `technicals` — RVOL (today's volume ÷ average prior daily volume),
-  % vs the 20-day SMA, window return, swing high/low, day-range position,
-  trend (`up`/`down`/`sideways`)
+- `technicals` — RVOL (time-adjusted, see above), % vs the 20-day SMA, window
+  return, swing high/low, day-range position, ATR %, trend
+  (`up`/`down`/`sideways`)
+- `intraday` — gap %, opening range high/low, VWAP, price vs VWAP, session
+  high/low/volume, or `available: false` with a stated reason
+- `market` — trading phase, % of session elapsed, minutes to close
 - `analyst` — consensus, analyst count, buy/hold/sell %, target mean/low/high,
   upside %
 - `news` — total, positive/negative/neutral counts, net tone, recent headlines
@@ -134,15 +137,114 @@ both engines are instructed to say so rather than fake a valuation view.
 
 ---
 
+## Two horizons
+
+Every stock is judged **twice**, because the same evidence answers two
+different questions.
+
+### Intraday — closed before the bell
+
+Reads the session tape only: VWAP, the opening range, the gap, time-adjusted
+RVOL and position in the day's range, all built from 5-minute bars.
+
+A BUY requires **all** of:
+
+- net score ≥ 25
+- price above VWAP
+- price above the opening-range high
+- time-adjusted RVOL ≥ 1.5
+- at least 45 minutes left in the session
+
+Those are enforced in code, for the LLM engine too. If the panel argues a BUY
+without them the verdict is held down to WATCH and the row is tagged *held back
+by desk rules* with the reason.
+
+Each call carries three levels read from the evidence: **trigger** (opening
+range high), **invalidation** (nearest of VWAP / opening-range low below price)
+and **objective** (one average daily range higher).
+
+### Positional — held for weeks
+
+Reads trend, the 52-week position, analyst headroom and news. A BUY needs
+net ≥ 25 **and** leadership (52-week position ≥ 60 or RVOL ≥ 3).
+
+Each positional call carries a **holding window**:
+
+```
+hold 4w–2mo  ·  minimum ~19 trading days
+basis: 15.52% to the mean target at an average daily range of 1.43%,
+       assuming ~30% of that range accrues as net drift
+```
+
+That is arithmetic on two evidence figures — distance to the mean analyst
+target, and the stock's own ATR — plus one openly stated assumption. It is
+computed in code and handed *to* the model, never invented by it, so the same
+number appears whichever engine ran.
+
+**It is not a claim that the position becomes profitable in that time, or at
+all.** It is an order-of-magnitude estimate of how long the thesis needs, and
+it is capped at twelve months because that is the horizon sell-side targets are
+set on.
+
+---
+
+## Running before the open
+
+At 09:00 the session has not traded. There is no open, no range, no VWAP and no
+volume — so **an honest intraday signal is impossible**, and the app says so
+instead of recycling yesterday's tape:
+
+```
+INTRADAY   UNAVAILABLE   same session (once open)
+   No intraday call possible: no live session — pre-open. VWAP, the opening
+   range and today's RVOL do not exist until the session has traded.
+   Watch: previous close, and the recent swing high/low from the daily window.
+```
+
+The **positional track works normally at 09:00** — it does not need today's
+data. So a pre-open run gives you a real multi-week shortlist plus an intraday
+watchlist with levels.
+
+The workflow that actually works:
+
+| Time | Run | What you get |
+|---|---|---|
+| ~09:00 | pre-open | positional BUYs are real; intraday is a watchlist with levels |
+| ~09:45+ | confirmation | the opening range has printed — intraday verdicts become real |
+| through the day | re-run | RVOL and VWAP firm up as the session builds |
+
+Phase is taken from the feed's own `marketState` when yfinance provides it, so
+market holidays are respected rather than guessed from the calendar.
+
+### RVOL is scaled for time of day
+
+`today_volume ÷ average_full_day_volume` is only a fair comparison at the
+closing bell. Two hours into a 6h15m session, a stock trading exactly its
+normal volume has printed about a third of it and looks dead.
+
+RVOL is therefore divided by the fraction of the session elapsed, and both
+figures are kept:
+
+```json
+"rvol": 1.02, "rvol_raw": 0.40,
+"rvol_method": "scaled to 39% of session elapsed"
+```
+
+---
+
 ## Scoring
 
 Both engines implement one interface:
 
 ```python
 evaluate(evidence) -> {
-  "scores":  {agent: {"score": 0-100, "reasons": [...]}},
-  "verdict": {"winner", "verdict", "confidence", "rationale",
-              "key_catalyst", "bull_score", "bear_score", "net"}
+  "scores": {agent: {"score": 0-100, "reasons": [...]}},
+  "tracks": {
+    "intraday":   {"verdict", "confidence", "winner", "rationale",
+                   "key_catalyst", "horizon", "levels", ...},
+    "positional": {..., "horizon_days_min", "horizon_days_max",
+                   "horizon_basis"}
+  }
 }
 ```
 
@@ -203,7 +305,8 @@ file. `.env` is never read by the browser and never leaves the machine.
 
 ```
 app.py            server, agent state machine, Telegram, SQLite
-scoring.py        deterministic agents + Judge
+market.py         NSE trading phase + session-elapsed maths
+scoring.py        deterministic agents + both Judges
 llm.py            LLM debate, provider detection, grounding verifier
 data_sources.py   demo loader, yfinance adapter, evidence builder
 dashboard.html    the whole UI — inline CSS/JS, no build step, no libraries
@@ -228,13 +331,14 @@ Every run is written to `signals.db`:
 
 - `runs` — mode, engine, universe size, shortlist size, BUY count, top pick,
   Telegram messages sent, status
-- `verdicts` — one row per analysed stock, with scores, rationale, price,
-  whether it fired, the engine that produced it, the count of unverified
-  figures, the named data gaps, and the **full evidence bundle** it was judged
-  on, so any past call can be re-examined exactly as the panel saw it
+- `verdicts` — **one row per stock per horizon** (`track` = `intraday` or
+  `positional`), with scores, rationale, holding window and its basis, the
+  trigger/invalidation/objective levels, market phase, whether it fired, the
+  engine that produced it, the count of unverified figures, the named data
+  gaps, and the **full evidence bundle** it was judged on
 
 ```bash
-sqlite3 signals.db "select symbol, verdict, confidence, fired, engine from verdicts order by id desc limit 10;"
+sqlite3 signals.db "select symbol, track, verdict, confidence, horizon, fired from verdicts order by id desc limit 20;"
 ```
 
 ---
@@ -249,5 +353,10 @@ sqlite3 signals.db "select symbol, verdict, confidence, fired, engine from verdi
   model. It produces a count, and the agents may only cite it as a count.
 - The LLM panel is a debate, not a forecast. Confidence is the panel's own
   conviction, and nothing more.
+- A holding window says how long a thesis plausibly needs, not that it works.
+  Nothing here estimates a probability of profit, because nothing in this feed
+  supports one.
+- Intraday verdicts go stale in minutes. A BUY read at 10:15 is a statement
+  about 10:15.
 - No order is ever placed. There is no broker integration and no code path that
   could create one.

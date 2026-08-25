@@ -18,6 +18,7 @@ import sqlite3
 import sys
 import threading
 import time
+from concurrent import futures
 import webbrowser
 from datetime import datetime, timedelta, timezone
 
@@ -25,6 +26,7 @@ from flask import Flask, Response, jsonify, request
 
 import data_sources
 import llm
+import market
 import scoring
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -148,8 +150,10 @@ def fresh_state():
         "data_ts": None,
         "kpis": {
             "universe": 0, "in_debate": 0, "buy_signals": 0,
+            "intraday_signals": 0, "positional_signals": 0,
             "top_pick": {"symbol": None, "confidence": None},
         },
+        "market": market.describe(),
         "agents": fresh_agents(),
         "verdicts": [],
         "log": [],
@@ -247,16 +251,23 @@ def init_db():
                 name          TEXT,
                 cap_segment   TEXT,
                 sector        TEXT,
+                track         TEXT NOT NULL,
                 verdict       TEXT,
                 confidence    INTEGER,
                 winner        TEXT,
                 rationale     TEXT,
                 key_catalyst  TEXT,
+                horizon       TEXT,
+                horizon_days_min INTEGER,
+                horizon_days_max INTEGER,
+                horizon_basis TEXT,
+                levels_json   TEXT,
                 bull_score    INTEGER,
                 bear_score    INTEGER,
                 net           INTEGER,
                 price         REAL,
                 day_change_pct REAL,
+                market_phase  TEXT,
                 fired         INTEGER DEFAULT 0,
                 engine        TEXT,
                 ungrounded    INTEGER DEFAULT 0,
@@ -281,26 +292,37 @@ def db_start_run(mode, engine):
 
 
 def db_save_verdict(run_id, row):
+    """One audit row per stock per horizon, each with the evidence behind it."""
+    evidence_json = json.dumps(row.get("evidence") or {}, default=str)
+    scores_json = json.dumps(row.get("scores") or {})
+    gaps_json = json.dumps(row.get("data_gaps") or [])
+
     with db() as conn:
-        conn.execute(
-            """INSERT INTO verdicts
-               (run_id, created_at, symbol, name, cap_segment, sector, verdict,
-                confidence, winner, rationale, key_catalyst, bull_score, bear_score,
-                net, price, day_change_pct, fired, engine, ungrounded, data_gaps,
-                scores_json, evidence_json)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                run_id, now_ist().isoformat(), row["symbol"], row["name"],
-                row["cap_segment"], row.get("sector"), row["verdict"], row["confidence"],
-                row["winner"], row["rationale"], row["key_catalyst"], row["bull_score"],
-                row["bear_score"], row["net"], row.get("price"), row.get("day_change_pct"),
-                1 if row.get("fired") else 0, row.get("engine"),
-                len(row.get("ungrounded_numbers") or []),
-                json.dumps(row.get("data_gaps") or []),
-                json.dumps(row.get("scores") or {}),
-                json.dumps(row.get("evidence") or {}, default=str),
-            ),
-        )
+        for track_name, track in (row.get("tracks") or {}).items():
+            conn.execute(
+                """INSERT INTO verdicts
+                   (run_id, created_at, symbol, name, cap_segment, sector, track,
+                    verdict, confidence, winner, rationale, key_catalyst,
+                    horizon, horizon_days_min, horizon_days_max, horizon_basis,
+                    levels_json, bull_score, bear_score, net, price, day_change_pct,
+                    market_phase, fired, engine, ungrounded, data_gaps,
+                    scores_json, evidence_json)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    run_id, now_ist().isoformat(), row["symbol"], row["name"],
+                    row["cap_segment"], row.get("sector"), track_name,
+                    track.get("verdict"), track.get("confidence"), track.get("winner"),
+                    track.get("rationale"), track.get("key_catalyst"),
+                    track.get("horizon"), track.get("horizon_days_min"),
+                    track.get("horizon_days_max"), track.get("horizon_basis"),
+                    json.dumps(track.get("levels") or {}),
+                    track.get("bull_score"), track.get("bear_score"), track.get("net"),
+                    row.get("price"), row.get("day_change_pct"), row.get("market_phase"),
+                    1 if track.get("fired") else 0, row.get("engine"),
+                    len(row.get("ungrounded_numbers") or []),
+                    gaps_json, scores_json, evidence_json,
+                ),
+            )
 
 
 def db_finish_run(run_id, **fields):
@@ -345,45 +367,89 @@ def send_telegram(text):
         return False, scrub(f"{type(exc).__name__}: {exc}")
 
 
-def buy_message(row):
+def _money(value):
+    return f"₹{value:,.2f}" if isinstance(value, (int, float)) else "data unavailable"
+
+
+def _levels_line(track):
+    levels = track.get("levels") or {}
+    parts = []
+    for label, key in (("Trigger", "trigger"), ("Invalidation", "invalidation"),
+                       ("Objective", "objective")):
+        value = levels.get(key)
+        if isinstance(value, (int, float)):
+            parts.append(f"{label} ₹{value:,.2f}")
+    return " · ".join(parts)
+
+
+def buy_message(row, track_name, track):
     esc = html.escape
     cap = (row.get("cap_segment") or "unknown").capitalize()
-    price = row.get("price")
     change = row.get("day_change_pct")
-    price_txt = f"₹{price:,.2f}" if isinstance(price, (int, float)) else "data unavailable"
     change_txt = f"{change:+.2f}%" if isinstance(change, (int, float)) else "data unavailable"
 
-    return (
-        f"🟢 <b>BUY SIGNAL — {esc(row['symbol'])}</b> ({esc(cap)} cap)\n\n"
-        f"Verdict: BUY | Confidence: {int(row['confidence'])}/10\n"
-        f"Winner: {esc(row['winner'])}\n"
-        f"Why: {esc(row['rationale'])}\n"
-        f"Key catalyst: {esc(row['key_catalyst'])}\n"
-        f"Live price: {price_txt} | Day change: {change_txt}\n\n"
-        f"<i>{esc(DISCLAIMER)}</i>"
-    )
+    if track_name == "intraday":
+        header = f"🟢 <b>INTRADAY BUY — {esc(row['symbol'])}</b> ({esc(cap)} cap)"
+        horizon = (f"Horizon: {esc(track.get('horizon') or 'same session')} "
+                   f"— close before the bell")
+    else:
+        header = f"🔵 <b>POSITIONAL BUY — {esc(row['symbol'])}</b> ({esc(cap)} cap)"
+        days_min = track.get("horizon_days_min")
+        hold = f"Hold: {esc(track.get('horizon') or 'data unavailable')}"
+        if days_min:
+            hold += f" (minimum ~{int(days_min)} trading days)"
+        horizon = f"{hold}\nBasis: {esc(track.get('horizon_basis') or '')}"
+
+    lines = [
+        header, "",
+        f"Verdict: BUY | Confidence: {int(track['confidence'])}/10",
+        f"Winner: {esc(track.get('winner') or '—')}",
+        f"Why: {esc(track.get('rationale') or '')}",
+        f"Key catalyst: {esc(track.get('key_catalyst') or '')}",
+        f"Live price: {_money(row.get('price'))} | Day change: {change_txt}",
+    ]
+    levels = _levels_line(track)
+    if levels:
+        lines.append(esc(levels))
+    lines += [horizon, "", f"<i>{esc(DISCLAIMER)}</i>"]
+    return "\n".join(lines)
 
 
-def summary_message(fired, analysed, mode, engine, universe):
+def summary_message(rows, mode, engine, universe, phase_label):
     esc = html.escape
+    intraday = _fired(rows, "intraday")
+    positional = _fired(rows, "positional")
+
     lines = [
         f"📊 <b>{esc(BRAND)} — daily summary</b>",
-        f"{esc(now_ist().strftime('%d %b %Y, %H:%M IST'))} · mode: {esc(mode)} · engine: {esc(engine)}",
-        f"Universe {universe} · debated {analysed} · BUY signals {len(fired)}",
+        f"{esc(now_ist().strftime('%d %b %Y, %H:%M IST'))} · {esc(phase_label or '')} "
+        f"· mode: {esc(mode)} · engine: {esc(engine)}",
+        f"Universe {universe} · debated {len(rows)} · "
+        f"intraday {len(intraday)} · positional {len(positional)}",
         "",
     ]
-    if fired:
-        for row in fired:
-            price = row.get("price")
+
+    def block(title, fired, icon):
+        if not fired:
+            return [f"{title}: none fired."]
+        out = [f"<b>{title}</b>"]
+        for row, _name, track in fired:
             change = row.get("day_change_pct")
-            price_txt = f"₹{price:,.2f}" if isinstance(price, (int, float)) else "price n/a"
             change_txt = f"{change:+.2f}%" if isinstance(change, (int, float)) else "n/a"
-            lines.append(
-                f"🟢 <b>{esc(row['symbol'])}</b> — BUY {int(row['confidence'])}/10 "
-                f"· {price_txt} ({change_txt})"
+            tail = (f" · hold {esc(track.get('horizon') or '')}"
+                    if _name == "positional" else "")
+            out.append(
+                f"{icon} <b>{esc(row['symbol'])}</b> — {int(track['confidence'])}/10 "
+                f"· {_money(row.get('price'))} ({change_txt}){tail}"
             )
-    else:
-        lines.append("No BUY signals fired in this run.")
+        return out
+
+    lines += block("Intraday — close before the bell", intraday, "🟢")
+    lines.append("")
+    lines += block("Positional — multi-week hold", positional, "🔵")
+
+    if not intraday and not positional:
+        lines += ["", "No BUY signals fired in this run."]
     lines += ["", f"<i>{esc(DISCLAIMER)}</i>"]
     return "\n".join(lines)
 
@@ -398,27 +464,30 @@ def _avg(values):
 
 
 def _verdict_row(evidence, result, threshold):
-    verdict = result["verdict"]
+    """One analysed stock, carrying both horizons."""
     price = (evidence.get("price") or {}).get("live")
     change = (evidence.get("price") or {}).get("day_change_pct")
-    fired = verdict["verdict"] == "BUY" and verdict["confidence"] >= threshold
+
+    tracks = {}
+    for name in ("intraday", "positional"):
+        track = dict((result.get("tracks") or {}).get(name) or {})
+        confidence = track.get("confidence")
+        track["fired"] = bool(
+            track.get("verdict") == "BUY"
+            and confidence is not None
+            and confidence >= threshold
+        )
+        tracks[name] = track
 
     return {
         "symbol": evidence.get("symbol"),
         "name": evidence.get("name"),
         "cap_segment": evidence.get("cap_segment"),
         "sector": evidence.get("sector"),
-        "verdict": verdict["verdict"],
-        "confidence": verdict["confidence"],
-        "winner": verdict["winner"],
-        "rationale": verdict["rationale"],
-        "key_catalyst": verdict["key_catalyst"],
-        "bull_score": verdict["bull_score"],
-        "bear_score": verdict["bear_score"],
-        "net": verdict["net"],
         "price": price,
         "day_change_pct": change,
-        "fired": fired,
+        "tracks": tracks,
+        "market_phase": (evidence.get("market") or {}).get("label"),
         "engine": result.get("engine"),
         "fallback_reason": result.get("fallback_reason"),
         "ungrounded_numbers": result.get("ungrounded_numbers") or [],
@@ -427,6 +496,16 @@ def _verdict_row(evidence, result, threshold):
         "evidence": evidence,
         "at": stamp(),
     }
+
+
+def _fired(rows, track=None):
+    """Every track that cleared the confidence bar, as (row, track_name, track)."""
+    out = []
+    for row in rows:
+        for name, data in row["tracks"].items():
+            if data.get("fired") and (track is None or name == track):
+                out.append((row, name, data))
+    return out
 
 
 def run_cycle(mode):
@@ -474,6 +553,7 @@ def run_cycle(mode):
 
         with LOCK:
             STATE["data_ts"] = data_sources.now_ist_str()
+            STATE["market"] = market.describe()
         set_agent("scout", status="done", stat1=universe_count, stat2=len(shortlist))
         set_kpi(universe=universe_count, in_debate=len(shortlist))
         log(f"scout shortlisted {len(shortlist)} of {universe_count}: "
@@ -531,17 +611,46 @@ def run_cycle(mode):
         # the panel is then revealed in pipeline order so the board reads like
         # a real hand-off.
         set_agent("bull", status="working")
-        results = []
-        for index, bundle in enumerate(shortlist, start=1):
-            result = llm.evaluate(bundle, provider=provider, log=log)
-            results.append((bundle, result))
-            if result.get("fallback_reason") and result.get("engine") == scoring.ENGINE_NAME:
-                with LOCK:
-                    if STATE["engine"] != scoring.ENGINE_NAME:
-                        STATE["engine"] = f"{scoring.ENGINE_NAME} (fallback)"
-                        engine_label = STATE["engine"]
-            avg = _avg([r["scores"]["bull"]["score"] for _b, r in results])
-            set_agent("bull", stat1=index, stat2=f"{avg:.0f}" if avg is not None else "n/a")
+
+        # One LLM call per stock, run a few at a time. Sequentially this is
+        # ~1-2 minutes a stock and a live shortlist of twelve would keep the
+        # board waiting for half an hour; the CLI spawns its own process per
+        # call, so a small pool cuts the wall time without straining anything.
+        workers = max(1, min(env_int("LLM_CONCURRENCY", 3), len(shortlist)))
+        done_count = 0
+        indexed = {}
+
+        log(f"debating {len(shortlist)} stocks, {workers} at a time")
+        with futures.ThreadPoolExecutor(max_workers=workers,
+                                        thread_name_prefix="debate") as pool:
+            pending = {
+                pool.submit(llm.evaluate, bundle, provider=provider, log=log): position
+                for position, bundle in enumerate(shortlist)
+            }
+            for future in futures.as_completed(pending):
+                position = pending[future]
+                bundle = shortlist[position]
+                try:
+                    result = future.result()
+                except Exception as exc:                          # noqa: BLE001
+                    log(f"{bundle.get('symbol')}: debate crashed "
+                        f"({type(exc).__name__}) — using the rule engine")
+                    result = scoring.evaluate(bundle)
+                    result["fallback_reason"] = f"{type(exc).__name__}: {exc}"
+
+                indexed[position] = (bundle, result)
+                done_count += 1
+
+                if result.get("fallback_reason") and result.get("engine") == scoring.ENGINE_NAME:
+                    with LOCK:
+                        if not str(STATE["engine"]).startswith(scoring.ENGINE_NAME):
+                            STATE["engine"] = f"{engine_label} + rule fallback"
+                avg = _avg([r["scores"]["bull"]["score"] for _b, r in indexed.values()])
+                set_agent("bull", stat1=done_count,
+                          stat2=f"{avg:.0f}" if avg is not None else "n/a")
+
+        # restore the shortlist's own order so the board reads predictably
+        results = [indexed[position] for position in sorted(indexed)]
         set_agent("bull", status="done")
         log(f"bull argued {len(results)} cases")
         pace()
@@ -560,25 +669,31 @@ def run_cycle(mode):
         for index, (bundle, result) in enumerate(results, start=1):
             row = _verdict_row(bundle, result, threshold)
             rows.append(row)
-            if row["verdict"] == "BUY":
-                buys += 1
+            buys = sum(1 for t in row["tracks"].values() if t.get("verdict") == "BUY") + buys
 
             with LOCK:
                 STATE["verdicts"].insert(0, _public_verdict(row))
             db_save_verdict(run_id, row)
 
             set_agent("judge", stat1=index, stat2=buys)
-            set_kpi(buy_signals=sum(1 for r in rows if r["fired"]),
+            set_kpi(buy_signals=len(_fired(rows)),
+                    intraday_signals=len(_fired(rows, "intraday")),
+                    positional_signals=len(_fired(rows, "positional")),
                     top_pick=_top_pick(rows))
-            log(f"judge · {row['symbol']}: {row['verdict']} {row['confidence']}/10 "
-                f"(bull {row['bull_score']} vs bear {row['bear_score']}) — {row['rationale']}")
+
+            for name, track in row["tracks"].items():
+                extra = (f" hold {track.get('horizon')}" if name == "positional"
+                         else f" ({track.get('horizon')})")
+                log(f"judge · {row['symbol']} [{name}]: {track.get('verdict')} "
+                    f"{track.get('confidence') or '—'}/10 —{extra} {track.get('rationale')}")
             pace(0.25)
         set_agent("judge", status="done")
         pace()
 
         # ---- Messenger ------------------------------------------------------
         set_agent("messenger", status="working", stat2=engine_label)
-        fired = [r for r in rows if r["fired"]]
+        fired = _fired(rows)
+        phase_label = rows[0].get("market_phase") if rows else None
         sent, errors = 0, []
 
         if not telegram_configured():
@@ -586,19 +701,19 @@ def run_cycle(mode):
                           "TELEGRAM_CHAT_ID in .env")
             log(errors[-1])
         else:
-            for row in fired:
-                ok, err = send_telegram(buy_message(row))
+            for row, track_name, track in fired:
+                ok, err = send_telegram(buy_message(row, track_name, track))
                 if ok:
                     sent += 1
-                    log(f"telegram: BUY signal sent for {row['symbol']}")
+                    log(f"telegram: {track_name} BUY sent for {row['symbol']}")
                 else:
                     errors.append(err)
-                    log(f"telegram: failed for {row['symbol']} — {err}")
+                    log(f"telegram: failed for {row['symbol']} [{track_name}] — {err}")
                 set_agent("messenger", stat1=sent)
                 pace(0.2)
 
             ok, err = send_telegram(
-                summary_message(fired, len(rows), mode, engine_label, universe_count))
+                summary_message(rows, mode, engine_label, universe_count, phase_label))
             if ok:
                 sent += 1
                 log("telegram: daily summary sent")
@@ -616,7 +731,9 @@ def run_cycle(mode):
 
         # ---- close out -------------------------------------------------------
         top = _top_pick(rows)
-        set_kpi(buy_signals=len(fired), top_pick=top)
+        set_kpi(buy_signals=len(fired), top_pick=top,
+                intraday_signals=len(_fired(rows, "intraday")),
+                positional_signals=len(_fired(rows, "positional")))
         db_finish_run(
             run_id, universe=universe_count, shortlisted=len(rows),
             buy_signals=len(fired), top_symbol=top.get("symbol"),
@@ -643,13 +760,47 @@ def run_cycle(mode):
 
 
 def _top_pick(rows):
-    buys = [r for r in rows if r["verdict"] == "BUY"]
-    pool = buys or rows
-    if not pool:
+    """Best call on the board, across both horizons."""
+    candidates = []
+    for row in rows:
+        for name, track in row["tracks"].items():
+            if track.get("confidence") is None:
+                continue
+            candidates.append((row, name, track))
+    if not candidates:
         return {"symbol": None, "confidence": None}
-    best = max(pool, key=lambda r: (r["confidence"], r["net"]))
-    return {"symbol": best["symbol"], "confidence": best["confidence"],
-            "verdict": best["verdict"]}
+
+    buys = [c for c in candidates if c[2].get("verdict") == "BUY"]
+    pool = buys or candidates
+    row, name, track = max(pool, key=lambda c: (c[2].get("confidence") or 0,
+                                                c[2].get("net") or 0))
+    return {
+        "symbol": row["symbol"],
+        "confidence": track.get("confidence"),
+        "verdict": track.get("verdict"),
+        "track": name,
+        "horizon": track.get("horizon"),
+    }
+
+
+def _public_track(track):
+    return {
+        "verdict": track.get("verdict"),
+        "confidence": track.get("confidence"),
+        "winner": track.get("winner"),
+        "why": track.get("rationale"),
+        "key_catalyst": track.get("key_catalyst"),
+        "horizon": track.get("horizon"),
+        "horizon_days_min": track.get("horizon_days_min"),
+        "horizon_days_max": track.get("horizon_days_max"),
+        "horizon_basis": track.get("horizon_basis"),
+        "levels": track.get("levels") or {},
+        "bull_score": track.get("bull_score"),
+        "bear_score": track.get("bear_score"),
+        "net": track.get("net"),
+        "fired": bool(track.get("fired")),
+        "gated": bool(track.get("gated")),
+    }
 
 
 def _public_verdict(row):
@@ -659,17 +810,10 @@ def _public_verdict(row):
         "name": row["name"],
         "cap_segment": row["cap_segment"],
         "sector": row["sector"],
-        "verdict": row["verdict"],
-        "confidence": row["confidence"],
-        "winner": row["winner"],
-        "why": row["rationale"],
-        "key_catalyst": row["key_catalyst"],
-        "bull_score": row["bull_score"],
-        "bear_score": row["bear_score"],
-        "net": row["net"],
         "price": row["price"],
         "day_change_pct": row["day_change_pct"],
-        "fired": row["fired"],
+        "market_phase": row.get("market_phase"),
+        "tracks": {name: _public_track(t) for name, t in row["tracks"].items()},
         "engine": row["engine"],
         "data_gaps": len(row["data_gaps"]),
         "ungrounded": len(row["ungrounded_numbers"]),
@@ -724,6 +868,8 @@ def config():
         "universe": {"total": total, "buckets": counts},
         "demo_bundles": len(data_sources.load_demo_bundles()),
         "db": os.path.basename(DB_PATH),
+        "market": market.describe(),
+        "tracks": list(scoring.TRACKS),
     })
 
 

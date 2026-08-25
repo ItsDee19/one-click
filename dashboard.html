@@ -158,16 +158,38 @@
     box-shadow:var(--shadow);overflow:hidden;
   }
   .row{
-    display:grid;grid-template-columns:88px minmax(150px,1.05fr) 96px minmax(220px,2.1fr) 132px;
-    gap:16px;align-items:center;padding:14px 18px;border-top:1px solid var(--border);
+    padding:14px 18px;border-top:1px solid var(--border);
     animation:slidein .35s ease both;
   }
   .row:first-child{border-top:0;}
   @keyframes slidein{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:none;}}
-  .row.head{
-    background:#fafbfc;border-top:0;padding:10px 18px;
-    font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600;
-    animation:none;
+  .rowtop{display:flex;align-items:baseline;gap:12px;margin-bottom:11px;}
+  .rowtop .px{margin-left:auto;text-align:right;display:flex;gap:10px;align-items:baseline;}
+
+  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .track{
+    border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fcfcfd;
+  }
+  .track.BUY{border-color:#c6e6d5;background:#f7fcf9;}
+  .track.AVOID{border-color:#f2d5d1;background:#fefaf9;}
+  .track.UNAVAILABLE{background:#fafafb;border-style:dashed;}
+  .track .thead{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .track .tname{
+    font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--faint);font-weight:700;
+  }
+  .track .horizon{
+    margin-left:auto;font-size:11px;color:var(--muted);font-weight:600;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52%;
+  }
+  .track .twhy{font-size:12.5px;color:var(--ink-2);line-height:1.45;}
+  .track .levels{
+    font-size:11px;color:var(--faint);margin-top:6px;
+    font-variant-numeric:tabular-nums;
+  }
+  .track .gate{
+    display:inline-block;margin-top:6px;font-size:10.5px;font-weight:650;
+    color:var(--amber);background:var(--amber-soft);padding:2px 7px;border-radius:5px;
   }
   .badge{
     display:inline-flex;align-items:center;justify-content:center;
@@ -177,6 +199,17 @@
   .badge.BUY{background:var(--green-soft);color:var(--green);}
   .badge.WATCH{background:var(--amber-soft);color:var(--amber);}
   .badge.AVOID{background:var(--red-soft);color:var(--red);}
+  .badge.UNAVAILABLE{background:#f0f1f4;color:var(--faint);width:96px;}
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+    font-size:11.5px;font-weight:600;background:#eef1f6;color:var(--ink-2);
+    border:1px solid var(--border-strong);white-space:nowrap;
+  }
+  .chip .livedot{width:6px;height:6px;border-radius:50%;background:var(--faint);}
+  .chip.live{background:var(--green-soft);color:var(--green);border-color:#c6e6d5;}
+  .chip.live .livedot{background:var(--green);animation:pulse 1.4s ease-in-out infinite;}
+  .chip.pre{background:var(--amber-soft);color:var(--amber);border-color:#f0dcb4;}
+  .chip.pre .livedot{background:var(--amber);}
   .sym{font-weight:640;font-size:14px;letter-spacing:-.005em;}
   .sym .fired{
     display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;letter-spacing:.06em;
@@ -234,10 +267,7 @@
   @media (max-width:1000px){
     .kpis{grid-template-columns:repeat(2,1fr);}
     .agents{grid-template-columns:repeat(2,1fr);}
-    .row{grid-template-columns:80px 1fr 84px;row-gap:8px;}
-    .row .why{grid-column:1/-1;}
-    .row .px{grid-column:1/-1;text-align:left;display:flex;gap:10px;align-items:baseline;}
-    .row.head{display:none;}
+    .tracks{grid-template-columns:1fr;}
   }
   @media (max-width:620px){
     .wrap{padding:20px 16px 48px;}
@@ -267,6 +297,7 @@
       </div>
     </div>
     <div class="controls">
+      <span class="chip" id="phase"><span class="livedot"></span><span id="phasetext">…</span></span>
       <select id="mode" aria-label="Data mode">
         <option value="demo">Demo · offline bundles</option>
         <option value="live">Live · NSE via yfinance</option>
@@ -294,7 +325,7 @@
     <div class="kpi">
       <div class="label">Buy signals</div>
       <div class="value" id="kpi-buys">—</div>
-      <div class="sub" id="kpi-buys-sub">fired to Telegram</div>
+      <div class="sub" id="kpi-buys-sub">intraday + positional</div>
     </div>
     <div class="kpi">
       <div class="label">Top pick</div>
@@ -448,15 +479,24 @@
 
     var tg = s.telegram || {};
     text(el("kpi-buys-sub"),
-      tg.sent ? tg.sent + " telegram message(s) sent"
-              : (tg.configured ? "fired to Telegram" : "telegram not configured"));
+      (k.intraday_signals || 0) + " intraday · " + (k.positional_signals || 0) + " positional" +
+      (tg.sent ? " · " + tg.sent + " sent" : ""));
+
+    /* market phase chip */
+    var mk = s.market || (CFG && CFG.market) || {};
+    var chip = el("phase");
+    chip.className = "chip" + (mk.live_session ? " live" : (mk.phase === "pre_open" ? " pre" : ""));
+    text(el("phasetext"), mk.live_session
+      ? mk.label + " · " + mk.session_pct + "% done · " + mk.minutes_to_close + "m left"
+      : (mk.label || "market closed"));
 
     var top = k.top_pick || {};
     if (top.symbol) {
       el("kpi-top").innerHTML = esc(top.symbol) +
         '<small>' + (top.confidence || "—") + '/10</small>';
       text(el("kpi-top-sub"), (top.verdict || "").toLowerCase() === "buy"
-        ? "highest-confidence BUY" : "highest confidence (" + esc(top.verdict || "—") + ")");
+        ? "best BUY · " + (top.track || "") + " · " + (top.horizon || "")
+        : "highest confidence (" + esc(top.verdict || "—") + " · " + (top.track || "") + ")");
     } else {
       text(el("kpi-top"), "—");
       text(el("kpi-top-sub"), running ? "debate in progress" : "awaiting the judge");
@@ -539,39 +579,65 @@
 
     var empty = feed.querySelector(".empty");
     if (empty) { feed.innerHTML = ""; }
-    if (!feed.querySelector(".row.head")) {
-      var head = document.createElement("div");
-      head.className = "row head";
-      head.innerHTML = "<div>Verdict</div><div>Stock</div><div>Confidence</div>" +
-                       "<div>Why</div><div style='text-align:right'>Live price</div>";
-      feed.appendChild(head);
-    }
 
     /* newest verdicts arrive at the front of the array */
     var fresh = verdicts.slice(0, verdicts.length - renderedVerdicts).reverse();
     fresh.forEach(function (v) {
       var row = document.createElement("div");
-      row.className = "row " + v.verdict;
+      row.className = "row";
       var dir = typeof v.day_change_pct !== "number" ? "flat"
               : v.day_change_pct > 0 ? "up" : v.day_change_pct < 0 ? "down" : "flat";
+      var t = v.tracks || {};
+      var anyFired = (t.intraday && t.intraday.fired) || (t.positional && t.positional.fired);
+
       row.innerHTML =
-        '<div><span class="badge ' + v.verdict + '">' + esc(v.verdict) + '</span></div>' +
-        '<div><div class="sym">' + esc(v.symbol) +
-          (v.fired ? '<span class="fired" title="Cleared the confidence threshold and was ' +
-                     'queued for Telegram">SIGNAL</span>' : '') + '</div>' +
-          '<div class="subtle">' + esc(v.name || "") +
-          (v.cap_segment ? " · " + esc(v.cap_segment) + " cap" : "") + '</div></div>' +
-        '<div><div class="conf">' + esc(v.confidence) + '<small>/10</small></div>' +
-          '<div class="meter"><i style="width:' + (Number(v.confidence) || 0) * 10 + '%"></i></div></div>' +
-        '<div class="why">' + esc(v.why) +
-          '<span class="cat">' + esc(v.winner) + ' won · catalyst: ' + esc(v.key_catalyst) +
-          (v.data_gaps ? ' · ' + v.data_gaps + ' data gap(s)' : '') +
-          (v.ungrounded ? ' · ⚠ ' + v.ungrounded + ' unverified figure(s)' : '') + '</span></div>' +
-        '<div class="px"><div class="p">' + money(v.price) + '</div>' +
-          '<div class="c ' + dir + '">' + pct(v.day_change_pct) + '</div></div>';
-      feed.insertBefore(row, feed.children[1] || null);
+        '<div class="rowtop">' +
+          '<div><div class="sym">' + esc(v.symbol) +
+            (anyFired ? '<span class="fired" title="Cleared the confidence threshold and ' +
+                        'was queued for Telegram">SIGNAL</span>' : '') + '</div>' +
+            '<div class="subtle">' + esc(v.name || "") +
+            (v.cap_segment ? " · " + esc(v.cap_segment) + " cap" : "") +
+            (v.data_gaps ? ' · ' + v.data_gaps + ' data gap(s)' : '') +
+            (v.ungrounded ? ' · ⚠ ' + v.ungrounded + ' unverified figure(s)' : '') +
+            '</div></div>' +
+          '<div class="px"><span class="p">' + money(v.price) + '</span>' +
+            '<span class="c ' + dir + '">' + pct(v.day_change_pct) + '</span></div>' +
+        '</div>' +
+        '<div class="tracks">' +
+          trackCell("Intraday", t.intraday) +
+          trackCell("Positional", t.positional) +
+        '</div>';
+      feed.insertBefore(row, feed.firstChild);
     });
     renderedVerdicts = verdicts.length;
+  }
+
+  function trackCell(label, track) {
+    if (!track) { return ''; }
+    var verdict = track.verdict || "—";
+    var conf = track.confidence;
+    var levels = track.levels || {};
+
+    var levelBits = [];
+    if (typeof levels.trigger === "number") { levelBits.push("Trigger " + money(levels.trigger)); }
+    if (typeof levels.invalidation === "number") { levelBits.push("Invalidation " + money(levels.invalidation)); }
+    if (typeof levels.objective === "number") { levelBits.push("Objective " + money(levels.objective)); }
+    if (typeof levels.watch_above === "number") { levelBits.push("Watch above " + money(levels.watch_above)); }
+    if (typeof levels.watch_below === "number") { levelBits.push("Watch below " + money(levels.watch_below)); }
+
+    return '<div class="track ' + esc(verdict) + '">' +
+      '<div class="thead">' +
+        '<span class="badge ' + esc(verdict) + '">' + esc(verdict) + '</span>' +
+        '<span class="tname">' + esc(label) + '</span>' +
+        (conf === null || conf === undefined ? ''
+          : '<span class="conf">' + esc(conf) + '<small>/10</small></span>') +
+        '<span class="horizon" title="' + esc(track.horizon_basis || "") + '">' +
+          esc(track.horizon || "") + '</span>' +
+      '</div>' +
+      '<div class="twhy">' + esc(track.why || "") + '</div>' +
+      (levelBits.length ? '<div class="levels">' + esc(levelBits.join("  ·  ")) + '</div>' : '') +
+      (track.gated ? '<span class="gate">held back by desk rules</span>' : '') +
+      '</div>';
   }
 
   /* ---------------- start ---------------- */
