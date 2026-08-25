@@ -357,6 +357,10 @@
       <span class="v" id="record">no settled signals yet</span>
     </div>
     <div class="stripitem">
+      <span class="k">Confidence</span>
+      <span class="v" id="calib">not yet calibrated</span>
+    </div>
+    <div class="stripitem">
       <span class="k">Next scheduled run</span>
       <span class="v" id="nextrun">—</span>
     </div>
@@ -516,6 +520,12 @@
     record.classList.toggle("none", !line);
     text(record, line || "no settled signals yet");
 
+    /* confidence calibration — does a 9/10 call beat a 7/10 one? */
+    var calib = el("calib");
+    var cline = (s.calibration_line || "").replace(/^confidence calibration:\s*/i, "");
+    calib.classList.toggle("none", !cline);
+    text(calib, cline || "not yet calibrated");
+
     /* next scheduled run */
     var sch = (s.scheduler || (CFG && CFG.scheduler)) || {};
     var next = el("nextrun");
@@ -589,6 +599,8 @@
     /* banners */
     if (s.status === "error" && s.error) {
       banner("err", "Run failed — " + s.error);
+    } else if (s.concentration) {
+      banner("warn", "Concentration — " + s.concentration);
     } else if (tg.error) {
       banner("warn", "Telegram: " + tg.error);
     } else if (CFG && !CFG.telegram_configured) {

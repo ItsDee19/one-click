@@ -160,7 +160,8 @@ def _no_llm(reason):
 # prompt
 # --------------------------------------------------------------------------
 
-def _memory_section(memory: dict, scoreboard_line: str) -> str:
+def _memory_section(memory: dict, scoreboard_line: str,
+                    calibration_line: str = "") -> str:
     """
     What the desk already said about this stock, and how it has done overall.
 
@@ -169,12 +170,14 @@ def _memory_section(memory: dict, scoreboard_line: str) -> str:
     prompt says so explicitly, because a model shown its own past call will
     otherwise either anchor to it or over-correct against it.
     """
-    if not memory and not scoreboard_line:
+    if not memory and not scoreboard_line and not calibration_line:
         return ""
 
     lines = ["=== THE DESK'S OWN RECORD ==="]
     if scoreboard_line:
         lines.append(f"Track record so far: {scoreboard_line}.")
+    if calibration_line:
+        lines.append(calibration_line.capitalize() + ".")
 
     for track, previous in (memory or {}).items():
         when = str(previous.get("created_at") or "")[:16].replace("T", " ")
@@ -197,7 +200,8 @@ def _memory_section(memory: dict, scoreboard_line: str) -> str:
     return "\n".join(lines) + "\n\n"
 
 
-def build_prompt(evidence: dict, memory: dict = None, scoreboard_line: str = "") -> str:
+def build_prompt(evidence: dict, memory: dict = None, scoreboard_line: str = "",
+                 calibration_line: str = "") -> str:
     gaps = evidence.get("data_gaps") or []
     gap_line = ", ".join(gaps) if gaps else "none — every field computed"
     trimmed = {k: v for k, v in evidence.items()
@@ -238,7 +242,7 @@ def build_prompt(evidence: dict, memory: dict = None, scoreboard_line: str = "")
 
     return (
         f"{SYSTEM_PROMPT}\n\n"
-        f"{_memory_section(memory, scoreboard_line)}"
+        f"{_memory_section(memory, scoreboard_line, calibration_line)}"
         f"=== MARKET CONTEXT ===\n{session_line}\n\n"
         f"=== HOLDING WINDOW (computed, do not restate a different one) ===\n"
         f"{window['label']} — {window['basis']}\n\n"
@@ -661,7 +665,8 @@ def _gate_intraday(intraday: dict, evidence: dict) -> dict:
 # --------------------------------------------------------------------------
 
 def evaluate(evidence: dict, provider: dict = None, env=None, log=None,
-             memory: dict = None, scoreboard_line: str = "") -> dict:
+             memory: dict = None, scoreboard_line: str = "",
+             calibration_line: str = "") -> dict:
     """
     Run the LLM debate for one stock.
 
@@ -678,7 +683,8 @@ def evaluate(evidence: dict, provider: dict = None, env=None, log=None,
         out["fallback_reason"] = provider.get("reason")
         return out
 
-    prompt = build_prompt(evidence, memory=memory, scoreboard_line=scoreboard_line)
+    prompt = build_prompt(evidence, memory=memory, scoreboard_line=scoreboard_line,
+                          calibration_line=calibration_line)
     try:
         if name == "claude_code":
             raw = call_claude_code(prompt, provider["model"], env)

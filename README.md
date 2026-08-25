@@ -271,11 +271,53 @@ just the close. When both levels are touched on the same daily bar the order is
 unknowable from daily data, so it settles as *invalidated* — assuming the worse
 fill is the only honest choice.
 
-That produces a real track record, shown on the dashboard and handed to the
-panel in its own prompt:
+### It refuses to quote a rate it cannot support
+
+A hit rate off three signals is noise wearing a decimal point, and the first
+version printed exactly that — `66.7% of 3` — on the dashboard *and* into the
+LLM prompt, where a meaningless number can anchor the panel. Two gates now
+stand in the way:
+
+| Settled | What is reported |
+|---|---|
+| 0 | "no settled signals yet" |
+| 1–7 | counts only — "3 settled (2 reached target, 1 stopped) — too few to read a rate from" |
+| 8–19 | the rate, always with its interval, flagged `(indicative only)` |
+| 20+ | the rate with its 95% confidence interval |
+
+Intervals use the **Wilson score** method, because the textbook
+`p ± z·√(p(1-p)/n)` collapses to ±0 at 0% and 100% — precisely where small
+samples land. Two winners out of two would otherwise read "100%, no
+uncertainty"; Wilson reports 34–100%, which is the truth.
 
 ```
-Track record so far: positional 33.3% of 3 (+2.50% avg).
+positional: 60.0% of 10, 95% CI 31.3–83.2%, +4.00% avg (indicative only)
+```
+
+The raw proportion is still stored for the audit. What changes is that
+nothing is allowed to *present* it as a rate until the sample supports one.
+
+### It checks whether confidence means anything
+
+A confidence number nobody audits is decoration. Settled signals are bucketed
+by the confidence they were issued with, under the same gating:
+
+```
+confidence calibration: 7: 25.0% of 12, 9-10: 75.0% of 12
+```
+
+or, far more likely for a while:
+
+```
+confidence calibration: 4 settled across 2 buckets — too few to tell whether
+higher confidence performs better
+```
+
+Both lines go to the dashboard and into the panel's prompt as context:
+
+```
+Track record so far: positional: 3 settled (2 reached target, 1 stopped) —
+too few to read a rate from.
 positional: called BUY 8/10 on 2026-08-20 at 100.0 — that signal resolved as
 objective (10.0%)
 ```
@@ -321,6 +363,33 @@ invalidation is 0.8:1, under the 1.5:1 the desk requires.
 
 **Earnings awareness.** A print inside the next seven days is a binary event
 the Bear now scores, and the date is named in the evidence.
+
+**Exhaustion.** A 6% day is unremarkable for a stock that swings 4% and
+extraordinary for one that swings 1%. Comparing raw percentages across stocks
+hides that, so every move is measured in units of the stock's own average
+range:
+
+```
+today's 8% is 4x its average daily range of 2% — extended, poor place to
+start a position
+```
+
+The Bear scores it past 2.5x on the positional track and 2x on intraday,
+which is what stops a breakout entry from becoming a top tick.
+
+**Sector-relative strength.** The NIFTY comparison cannot see that an IT stock
+down 1% on a day its sector is down 3% is quietly strong. Sector medians are
+computed from the universe already being downloaded, and both sides score it.
+
+**Concentration.** Five BUYs in one sector is one bet in five envelopes, and no
+amount of per-stock analysis can see it — each stock is judged alone. The batch
+is checked after the run and flagged on the dashboard and in the Telegram
+summary:
+
+```
+⚠️ 3 of the fired names are Banking (HDFCBANK, ICICIBANK, SBIN) — these are
+correlated, not independent positions
+```
 
 ---
 
@@ -424,7 +493,7 @@ signals.db        SQLite audit (created on first run)
 | `GET /status` | full state as JSON (the page polls this every 500 ms) |
 | `GET /config` | brand, agents, engine, thresholds, universe counts, schedule |
 | `GET /scheduler` | next scheduled run and the last one fired |
-| `GET /scoreboard` | the desk's own record: open and settled signals |
+| `GET /scoreboard` | the desk's own record: open signals, settled outcomes, hit rates with confidence intervals, and confidence calibration |
 
 ### Audit
 
@@ -459,8 +528,10 @@ sqlite3 signals.db "select symbol, track, verdict, confidence, horizon, fired fr
   supports one.
 - Intraday verdicts go stale in minutes. A BUY read at 10:15 is a statement
   about 10:15.
-- The track record is a record, not a forecast. A handful of settled signals
-  says almost nothing; treat a hit rate under ~30 samples as noise.
+- The track record is a record, not a forecast. The app now enforces this
+  rather than relying on you to remember it: no rate is quoted under eight
+  settled signals, and everything up to twenty carries an interval and an
+  "indicative" flag.
 - Outcomes are resolved on daily bars, so a level touched intraday and
   reversed still counts as touched. That is deliberate but it is not the same
   as a fill.

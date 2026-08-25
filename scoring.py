@@ -161,6 +161,11 @@ def _bull_case(ev) -> _Tally:
     if window is not None and window > 0:
         t.add(min(10.0, window / 2.0), f"up {_fmt(window, '%')} over the pulled window")
 
+    sector_rel = _get(ev, "relative", "sector_rel_pct")
+    if sector_rel is not None and sector_rel > 1.0:
+        t.add(min(10.0, sector_rel),
+              f"leading its own sector by {_fmt(sector_rel, '%')} today")
+
     # Strength that is genuinely the stock's own, not the index carrying it
     rel_window = _get(ev, "relative", "rel_window_return_pct")
     if rel_window is not None and rel_window > 0:
@@ -216,6 +221,19 @@ def _bear_case(ev) -> _Tally:
     day_pos = _get(ev, "technicals", "day_range_position_pct")
     if day_pos is not None and day_pos <= 30:
         t.add(8.0, f"closed at only {_fmt(day_pos, '%')} of the day's range — sellers had the last word")
+
+    move_vs_atr = _get(ev, "technicals", "move_vs_atr")
+    day_change = _get(ev, "price", "day_change_pct")
+    if move_vs_atr is not None and move_vs_atr >= 2.5 and (day_change or 0) > 0:
+        t.add(min(14.0, (move_vs_atr - 1.5) * 6.0),
+              f"today's {_fmt(day_change, '%')} is {_fmt(move_vs_atr)}x its average daily "
+              f"range of {_fmt(_get(ev, 'technicals', 'atr_pct'), '%')} — extended, "
+              f"poor place to start a position")
+
+    sector_rel = _get(ev, "relative", "sector_rel_pct")
+    if sector_rel is not None and sector_rel < -1.0:
+        t.add(min(10.0, -sector_rel),
+              f"lagging its own sector by {_fmt(abs(sector_rel), '%')} today")
 
     rel_window = _get(ev, "relative", "rel_window_return_pct")
     if rel_window is not None and rel_window < 0:
@@ -305,6 +323,12 @@ def _intraday_bear(ev) -> _Tally:
         t.add(10.0, f"opened {_fmt(gap, '%')} below yesterday's close")
     if gap is not None and change is not None and gap > 1.0 and change < gap:
         t.add(10.0, f"gapped {_fmt(gap, '%')} up but has given back into the session")
+
+    move_vs_atr = _get(ev, "technicals", "move_vs_atr")
+    if move_vs_atr is not None and move_vs_atr >= 2.0:
+        t.add(min(15.0, (move_vs_atr - 1.0) * 7.0),
+              f"already {_fmt(move_vs_atr)}x a normal day's range — the move to trade "
+              f"has largely happened")
 
     day_pos = _get(ev, "technicals", "day_range_position_pct")
     if day_pos is not None and day_pos <= 30:

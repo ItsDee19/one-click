@@ -208,6 +208,44 @@ def resolve(conn, fetch_bars, log=None):
 # scoreboard + memory
 # --------------------------------------------------------------------------
 
+# A proportion measured on a handful of trials carries almost no information.
+# Two tiers, so the desk never quotes a rate it cannot support:
+#   below INDICATIVE   -> report the count only, never a percentage
+#   below QUOTABLE     -> report the rate as indicative, always with its interval
+MIN_SAMPLES_INDICATIVE = 8
+MIN_SAMPLES_QUOTABLE = 20
+Z_95 = 1.96
+
+
+def wilson_interval(hits, total, z=Z_95):
+    """
+    95% confidence interval for a hit rate, Wilson score method.
+
+    The naive interval (p ± z·√(p(1-p)/n)) collapses to ±0 at 0 or 100%, which
+    is exactly where small samples land — 2 of 2 would read "100%, no
+    uncertainty". Wilson stays sane at the edges and for tiny n, which is the
+    only regime this desk will be in for a long time.
+    """
+    if not total:
+        return (None, None)
+    p = hits / total
+    denominator = 1 + z * z / total
+    centre = (p + z * z / (2 * total)) / denominator
+    margin = (z * ((p * (1 - p) / total + z * z / (4 * total * total)) ** 0.5)) / denominator
+    return (round(max(0.0, centre - margin) * 100, 1),
+            round(min(1.0, centre + margin) * 100, 1))
+
+
+def sample_state(settled):
+    if not settled:
+        return "none"
+    if settled < MIN_SAMPLES_INDICATIVE:
+        return "insufficient"
+    if settled < MIN_SAMPLES_QUOTABLE:
+        return "indicative"
+    return "quotable"
+
+
 def scoreboard(conn):
     """Hit rate per track over everything that has actually settled."""
     out = {}
@@ -227,29 +265,129 @@ def scoreboard(conn):
             "SELECT COUNT(*) c FROM outcomes WHERE track = ? AND status = ?",
             (track, OPEN)).fetchone()["c"]
 
+        hits = row["hits"] or 0
+        state = sample_state(settled)
+        low, high = wilson_interval(hits, settled)
+
         out[track] = {
             "settled": settled,
             "open": still_open,
-            "objective": row["hits"] or 0,
+            "objective": hits,
             "invalidated": row["stops"] or 0,
             "expired": row["expiries"] or 0,
-            "hit_rate": round((row["hits"] or 0) / settled * 100, 1) if settled else None,
+            # the raw proportion is kept for the audit, but `state` governs
+            # whether anything is allowed to present it as a rate
+            "hit_rate": round(hits / settled * 100, 1) if settled else None,
+            "ci_low": low,
+            "ci_high": high,
+            "sample_state": state,
+            "samples_needed": max(0, MIN_SAMPLES_QUOTABLE - settled),
             "avg_return_pct": round(row["avg_return"], 2) if row["avg_return"] is not None else None,
         }
     return out
 
 
+def track_line(track, data):
+    """One track's record, phrased to match how much it actually knows."""
+    settled = data["settled"]
+    state = data["sample_state"]
+
+    if state == "none":
+        return None
+    if state == "insufficient":
+        # a percentage off five trials is noise wearing a decimal point
+        return (f"{track}: {settled} settled "
+                f"({data['objective']} reached target, {data['invalidated']} stopped) "
+                f"— too few to read a rate from")
+
+    band = ""
+    if data["ci_low"] is not None:
+        band = f", 95% CI {data['ci_low']}–{data['ci_high']}%"
+    qualifier = " (indicative only)" if state == "indicative" else ""
+    average = (f", {data['avg_return_pct']:+.2f}% avg"
+               if data["avg_return_pct"] is not None else "")
+    return f"{track}: {data['hit_rate']}% of {settled}{band}{average}{qualifier}"
+
+
 def scoreboard_line(stats):
-    """One human sentence, or an honest admission that there is no record yet."""
-    parts = []
-    for track, data in stats.items():
-        if not data["settled"]:
-            continue
-        parts.append(f"{track} {data['hit_rate']}% of {data['settled']} "
-                     f"({data['avg_return_pct']:+.2f}% avg)")
+    """
+    One honest sentence about the desk's record.
+
+    Never states a bare hit rate it cannot support: under eight settled
+    signals it reports counts only, and up to twenty it carries the
+    confidence interval and an explicit "indicative" flag.
+    """
+    parts = [line for line in
+             (track_line(track, data) for track, data in stats.items()) if line]
     if not parts:
         return "no settled signals yet — the desk has no track record to show"
     return " · ".join(parts)
+
+
+def calibration(conn, track=None):
+    """
+    Does a 9/10 call actually do better than a 7/10 one?
+
+    A confidence number nobody checks is decoration. This buckets settled
+    signals by the confidence they were issued with and reports the hit rate
+    of each — subject to the same sample gating, so a bucket holding three
+    signals reports three signals rather than a percentage.
+    """
+    where = "WHERE o.status != 'open'"
+    params = []
+    if track:
+        where += " AND o.track = ?"
+        params.append(track)
+
+    rows = conn.execute(
+        f"""SELECT v.confidence conf, o.status status, o.return_pct ret
+            FROM outcomes o JOIN verdicts v ON v.id = o.verdict_id
+            {where}""", params).fetchall()
+
+    buckets = {}
+    for row in rows:
+        conf = row["conf"]
+        if conf is None:
+            continue
+        key = "7" if conf == 7 else ("8" if conf == 8 else "9-10" if conf >= 9 else "<7")
+        slot = buckets.setdefault(key, {"settled": 0, "objective": 0, "returns": []})
+        slot["settled"] += 1
+        slot["objective"] += 1 if row["status"] == HIT else 0
+        if row["ret"] is not None:
+            slot["returns"].append(row["ret"])
+
+    out = {}
+    for key, slot in buckets.items():
+        settled = slot["settled"]
+        low, high = wilson_interval(slot["objective"], settled)
+        out[key] = {
+            "settled": settled,
+            "objective": slot["objective"],
+            "hit_rate": round(slot["objective"] / settled * 100, 1) if settled else None,
+            "ci_low": low, "ci_high": high,
+            "sample_state": sample_state(settled),
+            "avg_return_pct": (round(sum(slot["returns"]) / len(slot["returns"]), 2)
+                               if slot["returns"] else None),
+        }
+    return out
+
+
+def calibration_line(buckets):
+    """Whether confidence is earning its keep — or that we cannot tell yet."""
+    if not buckets:
+        return "no settled signals to calibrate confidence against"
+
+    quotable = {k: v for k, v in buckets.items()
+                if v["sample_state"] in ("indicative", "quotable")}
+    if not quotable:
+        total = sum(v["settled"] for v in buckets.values())
+        return (f"confidence calibration: {total} settled across "
+                f"{len(buckets)} bucket(s) — too few to tell whether higher "
+                f"confidence performs better")
+
+    parts = [f"{key}: {data['hit_rate']}% of {data['settled']}"
+             for key, data in sorted(quotable.items())]
+    return "confidence calibration: " + ", ".join(parts)
 
 
 def last_verdict(conn, symbol, track):

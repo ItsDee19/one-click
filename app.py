@@ -158,6 +158,9 @@ def fresh_state():
         "market": market.describe(),
         "scoreboard": {},
         "scoreboard_line": "",
+        "calibration": {},
+        "calibration_line": "",
+        "concentration": None,
         "agents": fresh_agents(),
         "verdicts": [],
         "log": [],
@@ -466,6 +469,10 @@ def summary_message(rows, mode, engine, universe, phase_label):
 
     if not intraday and not positional:
         lines += ["", "No BUY signals fired in this run."]
+
+    cluster = concentration(intraday + positional)
+    if cluster:
+        lines += ["", f"⚠️ {esc(cluster)}"]
     lines += ["", f"<i>{esc(DISCLAIMER)}</i>"]
     return "\n".join(lines)
 
@@ -586,6 +593,32 @@ def _verdict_row(evidence, result, threshold):
     }
 
 
+def concentration(fired):
+    """
+    Are the fired signals really independent bets?
+
+    Five BUYs in one sector is one bet in five envelopes, and no amount of
+    per-stock analysis can see it — each stock is judged alone. This looks at
+    the batch and says so when it clusters.
+    """
+    if len(fired) < 2:
+        return None
+
+    sectors = {}
+    for row, _track, _data in fired:
+        sector = row.get("sector") or "unclassified"
+        sectors.setdefault(sector, set()).add(row["symbol"])
+
+    biggest, symbols = max(sectors.items(), key=lambda kv: len(kv[1]))
+    share = len(symbols) / len({r["symbol"] for r, _t, _d in fired})
+
+    if len(symbols) >= 2 and share >= 0.6:
+        return (f"{len(symbols)} of the fired names are {biggest} "
+                f"({', '.join(sorted(symbols))}) — these are correlated, "
+                f"not independent positions")
+    return None
+
+
 def _fired(rows, track=None):
     """Every track that cleared the confidence bar, as (row, track_name, track)."""
     out = []
@@ -622,9 +655,17 @@ def run_cycle(mode):
         # settle yesterday's calls before making today's
         board = review_outcomes()
         board_line = history.scoreboard_line(board) if board else ""
+        try:
+            with db() as conn:
+                calib = history.calibration(conn)
+            calib_line = history.calibration_line(calib)
+        except Exception:                                          # noqa: BLE001
+            calib, calib_line = {}, ""
         with LOCK:
             STATE["scoreboard"] = board
             STATE["scoreboard_line"] = board_line
+            STATE["calibration"] = calib
+            STATE["calibration_line"] = calib_line
 
         # ---- Scout --------------------------------------------------------
         set_agent("scout", status="working")
@@ -727,7 +768,8 @@ def run_cycle(mode):
                     recall = {}
                 pending[pool.submit(llm.evaluate, bundle, provider=provider,
                                     log=log, memory=recall,
-                                    scoreboard_line=board_line)] = position
+                                    scoreboard_line=board_line,
+                                    calibration_line=calib_line)] = position
             for future in futures.as_completed(pending):
                 position = pending[future]
                 bundle = shortlist[position]
@@ -795,6 +837,12 @@ def run_cycle(mode):
         set_agent("messenger", status="working", stat2=engine_label)
         fired = _fired(rows)
         phase_label = rows[0].get("market_phase") if rows else None
+
+        cluster = concentration(fired)
+        if cluster:
+            log(f"concentration: {cluster}")
+        with LOCK:
+            STATE["concentration"] = cluster
         sent, errors = 0, []
 
         if not telegram_configured():
@@ -1029,6 +1077,7 @@ def scoreboard_route():
     try:
         with db() as conn:
             board = history.scoreboard(conn)
+            calib = history.calibration(conn)
             open_rows = history.open_signals(conn)
             settled = [dict(r) for r in conn.execute(
                 """SELECT symbol, track, status, return_pct, fired_at, resolved_at,
@@ -1041,6 +1090,8 @@ def scoreboard_route():
     return jsonify({
         "scoreboard": board,
         "summary": history.scoreboard_line(board),
+        "calibration": calib,
+        "calibration_summary": history.calibration_line(calib),
         "open": [{k: r[k] for k in ("symbol", "track", "fired_at", "entry_price",
                                     "objective", "invalidation",
                                     "max_favourable_pct", "max_adverse_pct")}

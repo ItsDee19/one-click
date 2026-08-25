@@ -189,6 +189,7 @@ def _empty_evidence(symbol, name, ticker, bucket, sector):
             "price_vs_sma_pct": None, "sma_period": SMA_PERIOD,
             "window_return_pct": None, "swing_high": None, "swing_low": None,
             "day_range_position_pct": None, "trend": None, "atr_pct": None,
+            "move_vs_atr": None,
         },
         "intraday": _empty_intraday("not built"),
         "market": market.describe(),
@@ -196,6 +197,7 @@ def _empty_evidence(symbol, name, ticker, bucket, sector):
             "benchmark": BENCHMARK_NAME, "benchmark_day_change_pct": None,
             "benchmark_window_return_pct": None, "rel_day_change_pct": None,
             "rel_window_return_pct": None, "outperforming": None,
+            "sector": None, "sector_median_pct": None, "sector_rel_pct": None,
         },
         "events": {"next_earnings": None, "days_to_earnings": None,
                    "earnings_inside_horizon": None},
@@ -380,6 +382,23 @@ def fetch_quotes(universe: dict, log=None) -> dict:
             f"as data unavailable")
 
     session = market.describe()
+
+    # Sector medians across the whole universe. An IT stock down 1% on a day
+    # its sector is down 3% is quietly strong, and neither the raw move nor
+    # the NIFTY comparison can show that.
+    sector_moves = {}
+    for bucket in BUCKETS:
+        for entry in universe.get(bucket, []):
+            frame = _frame_for(downloaded, entry["ticker"], single)
+            closes = _series_values(frame, "Close")
+            if len(closes) >= 2 and closes[-2] and entry.get("sector"):
+                sector_moves.setdefault(entry["sector"], []).append(
+                    (closes[-1] - closes[-2]) / closes[-2] * 100.0)
+    sector_median = {
+        sector: sorted(values)[len(values) // 2]
+        for sector, values in sector_moves.items() if len(values) >= 2
+    }
+
     quotes = {}
     for bucket in BUCKETS:
         rows = []
@@ -404,6 +423,10 @@ def fetch_quotes(universe: dict, log=None) -> dict:
             if change is not None and benchmark.get("day_change_pct") is not None:
                 relative = change - benchmark["day_change_pct"]
 
+            peer_median = sector_median.get(entry.get("sector"))
+            sector_rel = (change - peer_median
+                          if change is not None and peer_median is not None else None)
+
             rows.append({
                 "ticker": entry["ticker"],
                 "name": entry["name"],
@@ -411,6 +434,8 @@ def fetch_quotes(universe: dict, log=None) -> dict:
                 "bucket": bucket,
                 "day_change_pct": _round(change),
                 "rel_day_change_pct": _round(relative),
+                "sector_rel_pct": _round(sector_rel),
+                "sector_median_pct": _round(peer_median),
                 "rvol": _round(rvol),
                 "frame": frame,
             })
@@ -546,6 +571,9 @@ def build_evidence_live(quote: dict, log=None) -> dict:
         "rel_day_change_pct": _round(rel_day),
         "rel_window_return_pct": _round(rel_window),
         "outperforming": None if rel_day is None else bool(rel_day > 0),
+        "sector": quote.get("sector"),
+        "sector_median_pct": quote.get("sector_median_pct"),
+        "sector_rel_pct": quote.get("sector_rel_pct"),
     }
 
     # ---- calendar ----------------------------------------------------------
@@ -567,6 +595,7 @@ def _technicals(closes, highs, lows, volumes, live, price_block,
         "price_vs_sma_pct": None, "sma_period": SMA_PERIOD,
         "window_return_pct": None, "swing_high": None, "swing_low": None,
         "day_range_position_pct": None, "trend": None, "atr_pct": None,
+        "move_vs_atr": None,
     }
 
     ref = live if live is not None else (closes[-1] if closes else None)
@@ -602,6 +631,15 @@ def _technicals(closes, highs, lows, volumes, live, price_block,
         window = trs[-ATR_PERIOD:]
         if window and ref:
             out["atr_pct"] = _round(sum(window) / len(window) / ref * 100.0)
+
+    # How big is today's move in units of this stock's own normal day? A 6%
+    # move is unremarkable for a stock that swings 4% daily and extraordinary
+    # for one that swings 1%. Comparing raw percentages across stocks hides
+    # exactly that, and buying the third standard deviation of a move is how
+    # a breakout entry turns into a top tick.
+    day_change = price_block.get("day_change_pct")
+    if day_change is not None and out["atr_pct"]:
+        out["move_vs_atr"] = _round(abs(day_change) / out["atr_pct"])
 
     sma = None
     if closes:
