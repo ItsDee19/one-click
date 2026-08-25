@@ -52,11 +52,14 @@ def main(argv):
     print(f"capturing {len(entries)} tickers into {OUT_DIR}")
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    quotes = data_sources.fetch_quotes(
+    quotes, benchmark = data_sources.fetch_quotes(
         {bucket: [e for e in entries if e["bucket"] == bucket]
          for bucket in data_sources.BUCKETS},
         log=lambda m: print(f"  · {m}"),
     )
+    for rows in quotes.values():
+        for quote in rows:
+            quote["benchmark"] = benchmark
 
     written = 0
     for bucket in data_sources.BUCKETS:

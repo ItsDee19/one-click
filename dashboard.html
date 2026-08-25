@@ -95,6 +95,23 @@
   .kpi .value small{font-size:14px;font-weight:550;color:var(--muted);margin-left:4px;letter-spacing:0;}
   .kpi .sub{font-size:12px;color:var(--muted);margin-top:3px;}
 
+  /* ---------------- record + schedule strip ---------------- */
+  .strip{
+    display:flex;gap:14px;flex-wrap:wrap;margin:0 0 26px;
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:13px 18px;box-shadow:var(--shadow);
+  }
+  .stripitem{display:flex;align-items:baseline;gap:9px;min-width:0;}
+  .stripitem + .stripitem{
+    border-left:1px solid var(--border);padding-left:14px;
+  }
+  .stripitem .k{
+    font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--faint);font-weight:650;white-space:nowrap;
+  }
+  .stripitem .v{font-size:13px;color:var(--ink-2);font-weight:550;}
+  .stripitem .v.none{color:var(--faint);font-weight:450;}
+
   /* ---------------- section headings ---------------- */
   .sechead{display:flex;align-items:baseline;justify-content:space-between;margin:0 2px 13px;}
   .sechead h2{margin:0;font-size:14px;font-weight:640;letter-spacing:-.005em;}
@@ -334,6 +351,17 @@
     </div>
   </div>
 
+  <div class="strip" id="strip">
+    <div class="stripitem">
+      <span class="k">Track record</span>
+      <span class="v" id="record">no settled signals yet</span>
+    </div>
+    <div class="stripitem">
+      <span class="k">Next scheduled run</span>
+      <span class="v" id="nextrun">—</span>
+    </div>
+  </div>
+
   <div class="sechead">
     <h2>The panel</h2>
     <span class="note" id="panelnote">idle — press Start agents</span>
@@ -482,6 +510,20 @@
       (k.intraday_signals || 0) + " intraday · " + (k.positional_signals || 0) + " positional" +
       (tg.sent ? " · " + tg.sent + " sent" : ""));
 
+    /* track record — the desk's own hit rate on settled signals */
+    var record = el("record");
+    var line = s.scoreboard_line || (CFG && CFG.scoreboard_line) || "";
+    record.classList.toggle("none", !line);
+    text(record, line || "no settled signals yet");
+
+    /* next scheduled run */
+    var sch = (s.scheduler || (CFG && CFG.scheduler)) || {};
+    var next = el("nextrun");
+    next.classList.toggle("none", !sch.enabled);
+    text(next, sch.enabled
+      ? sch.next_run_label + " · " + sch.times + " IST · " + sch.mode
+      : "scheduler off");
+
     /* market phase chip */
     var mk = s.market || (CFG && CFG.market) || {};
     var chip = el("phase");
@@ -597,6 +639,8 @@
                         'was queued for Telegram">SIGNAL</span>' : '') + '</div>' +
             '<div class="subtle">' + esc(v.name || "") +
             (v.cap_segment ? " · " + esc(v.cap_segment) + " cap" : "") +
+            (typeof v.rel_day_change_pct === "number"
+               ? ' · ' + pct(v.rel_day_change_pct) + ' vs index' : '') +
             (v.data_gaps ? ' · ' + v.data_gaps + ' data gap(s)' : '') +
             (v.ungrounded ? ' · ⚠ ' + v.ungrounded + ' unverified figure(s)' : '') +
             '</div></div>' +
@@ -636,7 +680,11 @@
       '</div>' +
       '<div class="twhy">' + esc(track.why || "") + '</div>' +
       (levelBits.length ? '<div class="levels">' + esc(levelBits.join("  ·  ")) + '</div>' : '') +
+      (track.risk_reward && track.risk_reward.ratio
+         ? '<div class="levels">reward/risk ' + track.risk_reward.ratio + ':1</div>' : '') +
       (track.gated ? '<span class="gate">held back by desk rules</span>' : '') +
+      (track.suppressed ? '<span class="gate">already open · ' +
+         esc(track.suppressed) + '</span>' : '') +
       '</div>';
   }
 

@@ -44,6 +44,11 @@ INTRADAY_MIN_RVOL = 1.5
 # Below this many minutes left, a fresh intraday long has no room to work.
 INTRADAY_MIN_MINUTES_LEFT = 45
 
+# Minimum reward-to-risk before a BUY is allowed, measured on the track's own
+# objective and invalidation levels.
+MIN_RR_INTRADAY = 1.5
+MIN_RR_POSITIONAL = 1.5
+
 # --- holding-window model ---------------------------------------------------
 # Share of a stock's average daily range that accrues as *net* directional
 # drift on a trending day. Stated openly because the whole holding window
@@ -156,6 +161,13 @@ def _bull_case(ev) -> _Tally:
     if window is not None and window > 0:
         t.add(min(10.0, window / 2.0), f"up {_fmt(window, '%')} over the pulled window")
 
+    # Strength that is genuinely the stock's own, not the index carrying it
+    rel_window = _get(ev, "relative", "rel_window_return_pct")
+    if rel_window is not None and rel_window > 0:
+        t.add(min(12.0, rel_window),
+              f"outperforming the {_get(ev, 'relative', 'benchmark')} by "
+              f"{_fmt(rel_window, '%')} over the window")
+
     if not t.reasons:
         t.note("no bullish trigger present in the evidence")
     return t
@@ -204,6 +216,17 @@ def _bear_case(ev) -> _Tally:
     day_pos = _get(ev, "technicals", "day_range_position_pct")
     if day_pos is not None and day_pos <= 30:
         t.add(8.0, f"closed at only {_fmt(day_pos, '%')} of the day's range — sellers had the last word")
+
+    rel_window = _get(ev, "relative", "rel_window_return_pct")
+    if rel_window is not None and rel_window < 0:
+        t.add(min(12.0, -rel_window),
+              f"lagging the {_get(ev, 'relative', 'benchmark')} by "
+              f"{_fmt(abs(rel_window), '%')} over the window")
+
+    days_to_earnings = _get(ev, "events", "days_to_earnings")
+    if days_to_earnings is not None and days_to_earnings <= 7:
+        t.add(8.0, f"earnings in {int(days_to_earnings)} day(s) "
+                   f"({_get(ev, 'events', 'next_earnings')}) — binary event risk")
 
     gaps = ev.get("data_gaps") or []
     if len(gaps) >= 6:
@@ -424,6 +447,60 @@ def holding_window(ev) -> dict:
     }
 
 
+def risk_reward(price, levels) -> dict:
+    """
+    Distance to the objective against distance to the invalidation.
+
+    A high-conviction setup that risks more than it stands to make is still a
+    bad trade, and score alone can never see that — the levels have to be
+    compared. Returns nulls when either level is missing rather than guessing
+    a stop.
+    """
+    out = {"risk_pct": None, "reward_pct": None, "ratio": None}
+    if price is None or not levels:
+        return out
+
+    objective = levels.get("objective")
+    invalidation = levels.get("invalidation")
+    if objective is None or invalidation is None or not price:
+        return out
+    if invalidation >= price or objective <= price:
+        return out          # stop above price or target below it: not a long
+
+    risk = (price - invalidation) / price * 100.0
+    reward = (objective - price) / price * 100.0
+    if risk <= 0:
+        return out
+
+    out["risk_pct"] = round(risk, 2)
+    out["reward_pct"] = round(reward, 2)
+    out["ratio"] = round(reward / risk, 2)
+    return out
+
+
+def _apply_rr_gate(verdict_block, ev, minimum):
+    """Hold a BUY down to WATCH when the levels do not justify it."""
+    if verdict_block.get("verdict") != "BUY":
+        return verdict_block
+
+    rr = risk_reward(_get(ev, "price", "live"), verdict_block.get("levels"))
+    verdict_block["risk_reward"] = rr
+
+    if rr["ratio"] is None or rr["ratio"] >= minimum:
+        return verdict_block
+
+    verdict_block["verdict"] = "WATCH"
+    verdict_block["confidence"] = min(6, verdict_block.get("confidence") or 6)
+    verdict_block["gated"] = True
+    verdict_block["rationale"] = (
+        f"Held to WATCH on risk/reward: {rr['reward_pct']}% to the objective "
+        f"against {rr['risk_pct']}% to the invalidation is {rr['ratio']}:1, "
+        f"under the {minimum}:1 the desk requires. "
+        f"Original read: {verdict_block['rationale']}"
+    )
+    return verdict_block
+
+
 def _horizon_label(days_min, days_max):
     """Trading days -> a phrase a human reads without converting anything."""
     def phrase(days):
@@ -483,7 +560,7 @@ def judge_positional(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> 
         rationale = (f"Bull {bull_score} vs Bear {bear_score} (net {net}) — the two sides "
                      f"roughly cancel; nothing decisive either way.")
 
-    return {
+    block = {
         "track": "positional",
         "verdict": verdict,
         "confidence": confidence,
@@ -499,6 +576,7 @@ def judge_positional(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> 
         "horizon_basis": window["basis"],
         "levels": _positional_levels(ev),
     }
+    return _apply_rr_gate(block, ev, MIN_RR_POSITIONAL)
 
 
 def judge_intraday(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> dict:
@@ -555,7 +633,7 @@ def judge_intraday(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> di
         rationale = (f"Bull {bull_score} vs Bear {bear_score} (net {net}) — the session tape "
                      f"offers no decisive intraday edge.")
 
-    return {
+    block = {
         "track": "intraday",
         "verdict": verdict,
         "confidence": confidence,
@@ -573,6 +651,7 @@ def judge_intraday(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> di
         "levels": _intraday_levels(ev),
         "minutes_to_close": minutes_left,
     }
+    return _apply_rr_gate(block, ev, MIN_RR_INTRADAY)
 
 
 def _intraday_unavailable(reason, ev) -> dict:

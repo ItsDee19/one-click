@@ -38,6 +38,8 @@ UNIVERSE_FILE = os.path.join(HERE, "universe.json")
 
 SMA_PERIOD = 20            # N-day simple moving average used for price_vs_sma_pct
 HISTORY_PERIOD = "1mo"     # ~1 month of daily OHLC
+BENCHMARK = "^NSEI"        # NIFTY 50 — the yardstick for relative strength
+BENCHMARK_NAME = "NIFTY 50"
 INTRADAY_INTERVAL = "5m"   # granularity for VWAP / opening range
 OPENING_RANGE_BARS = 3     # first 3 x 5m bars = the 09:15-09:30 opening range
 ATR_PERIOD = 14
@@ -190,6 +192,13 @@ def _empty_evidence(symbol, name, ticker, bucket, sector):
         },
         "intraday": _empty_intraday("not built"),
         "market": market.describe(),
+        "relative": {
+            "benchmark": BENCHMARK_NAME, "benchmark_day_change_pct": None,
+            "benchmark_window_return_pct": None, "rel_day_change_pct": None,
+            "rel_window_return_pct": None, "outperforming": None,
+        },
+        "events": {"next_earnings": None, "days_to_earnings": None,
+                   "earnings_inside_horizon": None},
         "analyst": {
             "consensus": None, "num_analysts": None, "buy_pct": None, "hold_pct": None,
             "sell_pct": None, "target_mean": None, "target_low": None,
@@ -251,6 +260,14 @@ def load_demo_bundles(demo_dir: str = DEMO_DIR) -> list:
         bundle.setdefault("intraday", _empty_intraday(
             "demo bundle — a frozen snapshot has no live session to read"))
         bundle.setdefault("market", market.describe())
+        # a frozen bundle has no index alongside it and no forward calendar
+        bundle.setdefault("relative", {
+            "benchmark": BENCHMARK_NAME, "benchmark_day_change_pct": None,
+            "benchmark_window_return_pct": None, "rel_day_change_pct": None,
+            "rel_window_return_pct": None, "outperforming": None,
+        })
+        bundle.setdefault("events", {"next_earnings": None, "days_to_earnings": None,
+                                     "earnings_inside_horizon": None})
         bundles.append(_finalise_gaps(bundle))
     bundles.sort(key=lambda b: b["symbol"])
     return bundles
@@ -290,11 +307,35 @@ def _series_values(frame, column):
     return [v for v in (_clean(x) for x in frame[column].tolist()) if v is not None]
 
 
+def screen_score(quote) -> float:
+    """
+    How interesting is this stock today?
+
+    Raw day change is a poor screen on its own: it ranks a stock up 5% on dead
+    volume above one up 2% on four times its usual volume, and it cannot tell
+    a real move from the whole index rising together. So the screen ranks on
+    strength *relative to the NIFTY*, adjusted for participation:
+
+        score = relative day change % + 1.5 x (RVOL - 1)
+
+    Volume shifts the ranking without being able to dominate it.
+    """
+    change = quote.get("rel_day_change_pct")
+    if change is None:
+        change = quote.get("day_change_pct")
+    if change is None:
+        return -999.0
+
+    rvol = quote.get("rvol")
+    boost = 0.0 if rvol is None else 1.5 * (min(max(rvol, 0.0), 4.0) - 1.0)
+    return change + boost
+
+
 def screen_bucket(quotes: list, top_n: int) -> list:
-    """Keep the top N movers of a bucket by absolute-signed day change."""
+    """Keep the top N of a bucket by relative strength and participation."""
     ranked = sorted(
         [q for q in quotes if q.get("day_change_pct") is not None],
-        key=lambda q: q["day_change_pct"],
+        key=screen_score,
         reverse=True,
     )
     unscored = [q for q in quotes if q.get("day_change_pct") is None]
@@ -313,11 +354,13 @@ def fetch_quotes(universe: dict, log=None) -> dict:
 
     tickers = [e["ticker"] for bucket in BUCKETS for e in universe.get(bucket, [])]
     if not tickers:
-        return {b: [] for b in BUCKETS}
+        return {b: [] for b in BUCKETS}, {}
 
-    say(f"downloading {HISTORY_PERIOD} daily OHLC for {len(tickers)} tickers")
+    # The NIFTY rides along in the same request. Without it there is no way to
+    # tell a stock that is genuinely strong from one drifting up with the index.
+    say(f"downloading {HISTORY_PERIOD} daily OHLC for {len(tickers)} tickers + {BENCHMARK_NAME}")
     downloaded = yf.download(
-        tickers=" ".join(tickers),
+        tickers=" ".join(tickers + [BENCHMARK]),
         period=HISTORY_PERIOD,
         interval="1d",
         group_by="ticker",
@@ -326,27 +369,69 @@ def fetch_quotes(universe: dict, log=None) -> dict:
         progress=False,
         threads=True,
     )
-    single = len(tickers) == 1
+    single = False          # always at least the benchmark alongside a ticker
 
+    benchmark = _benchmark_block(_frame_for(downloaded, BENCHMARK, single))
+    if benchmark.get("day_change_pct") is not None:
+        say(f"{BENCHMARK_NAME} {benchmark['day_change_pct']:+.2f}% today, "
+            f"{benchmark['window_return_pct']:+.2f}% over the window")
+    else:
+        say(f"{BENCHMARK_NAME} unavailable — relative strength will be reported "
+            f"as data unavailable")
+
+    session = market.describe()
     quotes = {}
     for bucket in BUCKETS:
         rows = []
         for entry in universe.get(bucket, []):
             frame = _frame_for(downloaded, entry["ticker"], single)
             closes = _series_values(frame, "Close")
+            volumes = _series_values(frame, "Volume")
+
             change = None
             if len(closes) >= 2 and closes[-2]:
                 change = (closes[-1] - closes[-2]) / closes[-2] * 100.0
+
+            # RVOL at screen time, so the shortlist can weigh participation
+            rvol = None
+            if len(volumes) >= 3:
+                prior = [v for v in volumes[:-1] if v > 0]
+                if prior and volumes[-1] > 0:
+                    rvol = (volumes[-1] / (sum(prior) / len(prior))
+                            / market.volume_divisor(session["session_fraction"]))
+
+            relative = None
+            if change is not None and benchmark.get("day_change_pct") is not None:
+                relative = change - benchmark["day_change_pct"]
+
             rows.append({
                 "ticker": entry["ticker"],
                 "name": entry["name"],
                 "sector": entry.get("sector"),
                 "bucket": bucket,
                 "day_change_pct": _round(change),
+                "rel_day_change_pct": _round(relative),
+                "rvol": _round(rvol),
                 "frame": frame,
             })
         quotes[bucket] = rows
-    return quotes
+    return quotes, benchmark
+
+
+def _benchmark_block(frame) -> dict:
+    """Today's move and window return for the index, or nulls."""
+    closes = _series_values(frame, "Close")
+    out = {
+        "name": BENCHMARK_NAME, "ticker": BENCHMARK,
+        "last": None, "day_change_pct": None, "window_return_pct": None,
+    }
+    if len(closes) >= 2:
+        out["last"] = _round(closes[-1])
+        if closes[-2]:
+            out["day_change_pct"] = _round((closes[-1] - closes[-2]) / closes[-2] * 100.0)
+        if closes[0]:
+            out["window_return_pct"] = _round((closes[-1] - closes[0]) / closes[0] * 100.0)
+    return out
 
 
 def build_evidence_live(quote: dict, log=None) -> dict:
@@ -444,8 +529,30 @@ def build_evidence_live(quote: dict, log=None) -> dict:
                              if (target_mean and live) else None),
     }
 
-    # ---- news ------------------------------------------------------------
-    ev["news"] = _news_block(news_items)
+    # ---- relative strength vs the index ------------------------------------
+    benchmark = quote.get("benchmark") or {}
+    day_change = ev["price"]["day_change_pct"]
+    window = ev["technicals"]["window_return_pct"]
+    rel_day = (day_change - benchmark["day_change_pct"]
+               if day_change is not None and benchmark.get("day_change_pct") is not None
+               else None)
+    rel_window = (window - benchmark["window_return_pct"]
+                  if window is not None and benchmark.get("window_return_pct") is not None
+                  else None)
+    ev["relative"] = {
+        "benchmark": benchmark.get("name") or BENCHMARK_NAME,
+        "benchmark_day_change_pct": benchmark.get("day_change_pct"),
+        "benchmark_window_return_pct": benchmark.get("window_return_pct"),
+        "rel_day_change_pct": _round(rel_day),
+        "rel_window_return_pct": _round(rel_window),
+        "outperforming": None if rel_day is None else bool(rel_day > 0),
+    }
+
+    # ---- calendar ----------------------------------------------------------
+    # Holding through an earnings print is a materially different risk from
+    # holding a quiet stock, and the positional horizon is often long enough
+    # to span one. Worth naming rather than discovering afterwards.
+    ev["events"] = _events_block(info, ev["technicals"].get("atr_pct"))
 
     ev["source"] = "live"
     ev["as_of"] = now_ist_str()
@@ -666,6 +773,32 @@ def _recommendation_split(handle, symbol, say) -> dict:
     }
 
 
+def _events_block(info, _atr_pct=None) -> dict:
+    """Next earnings date from .info, if the feed carries one."""
+    out = {"next_earnings": None, "days_to_earnings": None,
+           "earnings_inside_horizon": None}
+
+    stamp = (info.get("earningsTimestamp")
+             or info.get("earningsTimestampStart")
+             or info.get("mostRecentQuarter"))
+    value = _clean(stamp)
+    if value is None:
+        return out
+
+    try:
+        when = datetime.fromtimestamp(value, tz=timezone.utc).astimezone(IST)
+    except (OverflowError, OSError, ValueError):
+        return out
+
+    days = (when.date() - datetime.now(IST).date()).days
+    if days < 0:                       # a past print tells us nothing forward
+        return out
+
+    out["next_earnings"] = when.strftime("%d %b %Y")
+    out["days_to_earnings"] = days
+    return out
+
+
 def _news_block(news_items) -> dict:
     """Normalise yfinance news (old flat shape and new {'content': ...} shape)."""
     recent, pos, neg, neu = [], 0, 0, 0
@@ -730,17 +863,24 @@ def scan_demo(shortlist_per_bucket: int, log=None):
 def scan_live(universe: dict, shortlist_per_bucket: int, log=None):
     """Return (universe_count, shortlisted_evidence_bundles) for live mode."""
     say = log or (lambda _m: None)
-    quotes = fetch_quotes(universe, log=say)
+    quotes, benchmark = fetch_quotes(universe, log=say)
 
     screened = []
     for bucket in BUCKETS:
         picked = screen_bucket(quotes.get(bucket, []), shortlist_per_bucket)
         if picked:
-            say(f"{bucket}-cap shortlist: " +
-                ", ".join(f"{q['ticker'].split('.')[0]} {q['day_change_pct']:+.2f}%"
-                          if q["day_change_pct"] is not None else q["ticker"].split(".")[0]
-                          for q in picked))
+            say(f"{bucket}-cap shortlist: " + ", ".join(
+                f"{q['ticker'].split('.')[0]} "
+                f"{q['day_change_pct']:+.2f}%"
+                + (f" (rel {q['rel_day_change_pct']:+.2f}%)"
+                   if q.get("rel_day_change_pct") is not None else "")
+                + (f" rvol {q['rvol']:.1f}x" if q.get("rvol") is not None else "")
+                if q["day_change_pct"] is not None else q["ticker"].split(".")[0]
+                for q in picked))
         screened.extend(picked)
+
+    for quote in screened:
+        quote["benchmark"] = benchmark
 
     # Intraday bars cost one more request, so we only pay for it on survivors.
     frames = fetch_intraday([q["ticker"] for q in screened], log=say)

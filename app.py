@@ -25,8 +25,10 @@ from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, jsonify, request
 
 import data_sources
+import history
 import llm
 import market
+import scheduler as scheduler_mod
 import scoring
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -154,6 +156,8 @@ def fresh_state():
             "top_pick": {"symbol": None, "confidence": None},
         },
         "market": market.describe(),
+        "scoreboard": {},
+        "scoreboard_line": "",
         "agents": fresh_agents(),
         "verdicts": [],
         "log": [],
@@ -165,6 +169,7 @@ def fresh_state():
 LOCK = threading.RLock()
 STATE = {}
 WORKER = None
+SCHEDULER = None
 
 
 def telegram_configured():
@@ -178,7 +183,8 @@ def telegram_configured():
 def log(message):
     line = f"[{stamp()}] {scrub(message)}"
     with LOCK:
-        STATE["log"].append(line)
+        # the scheduler logs between runs, when STATE may be bare
+        STATE.setdefault("log", []).append(line)
         del STATE["log"][:-160]
     try:
         print(line, flush=True)
@@ -280,6 +286,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_verdicts_symbol ON verdicts(symbol);
             """
         )
+        history.init(conn)
 
 
 def db_start_run(mode, engine):
@@ -292,14 +299,18 @@ def db_start_run(mode, engine):
 
 
 def db_save_verdict(run_id, row):
-    """One audit row per stock per horizon, each with the evidence behind it."""
+    """One audit row per stock per horizon, each with the evidence behind it.
+
+    Returns {track: verdict_id} so a fired signal can be followed afterwards.
+    """
+    saved = {}
     evidence_json = json.dumps(row.get("evidence") or {}, default=str)
     scores_json = json.dumps(row.get("scores") or {})
     gaps_json = json.dumps(row.get("data_gaps") or [])
 
     with db() as conn:
         for track_name, track in (row.get("tracks") or {}).items():
-            conn.execute(
+            cursor = conn.execute(
                 """INSERT INTO verdicts
                    (run_id, created_at, symbol, name, cap_segment, sector, track,
                     verdict, confidence, winner, rationale, key_catalyst,
@@ -323,6 +334,11 @@ def db_save_verdict(run_id, row):
                     gaps_json, scores_json, evidence_json,
                 ),
             )
+            saved[track_name] = cursor.lastrowid
+            if track.get("fired"):
+                history.record_signal(conn, cursor.lastrowid, run_id,
+                                      row, track_name, track)
+    return saved
 
 
 def db_finish_run(run_id, **fields):
@@ -463,20 +479,92 @@ def _avg(values):
     return sum(values) / len(values) if values else None
 
 
+def _bars_since(ticker, since_iso):
+    """Daily OHLC for one ticker since a signal fired — used to settle outcomes."""
+    import yfinance as yf
+
+    try:
+        fired = datetime.fromisoformat(since_iso)
+    except (TypeError, ValueError):
+        return []
+
+    days = max(2, (now_ist() - fired).days + 2)
+    frame = yf.Ticker(ticker).history(period=f"{min(days, 365)}d", interval="1d")
+    if frame is None or getattr(frame, "empty", True):
+        return []
+
+    bars = []
+    for stamp_index, row in frame.iterrows():
+        try:
+            when = stamp_index.to_pydatetime()
+        except AttributeError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=IST)
+        if when < fired:
+            continue          # only bars *after* the signal count
+        bars.append({
+            "date": when.isoformat(),
+            "high": float(row.get("High")) if row.get("High") == row.get("High") else None,
+            "low": float(row.get("Low")) if row.get("Low") == row.get("Low") else None,
+            "close": float(row.get("Close")) if row.get("Close") == row.get("Close") else None,
+        })
+    return bars
+
+
+def review_outcomes():
+    """
+    Settle every open signal before a new run judges anything.
+
+    This is what turns the audit trail into a feedback loop: past calls are
+    marked as having reached their objective, broken their invalidation, or
+    expired, and the resulting hit rate is shown on the board and handed to
+    the panel.
+    """
+    try:
+        with db() as conn:
+            summary = history.resolve(conn, _bars_since, log=log)
+            board = history.scoreboard(conn)
+        if summary["checked"]:
+            log(f"reviewed {summary['checked']} open signal(s), "
+                f"{summary['resolved']} settled · {history.scoreboard_line(board)}")
+        return board
+    except Exception as exc:                                       # noqa: BLE001
+        log(f"outcome review skipped ({type(exc).__name__}: {scrub(exc)})")
+        return {}
+
+
 def _verdict_row(evidence, result, threshold):
     """One analysed stock, carrying both horizons."""
     price = (evidence.get("price") or {}).get("live")
     change = (evidence.get("price") or {}).get("day_change_pct")
 
+    symbol = evidence.get("symbol")
+    cooldown_days = env_int("SIGNAL_COOLDOWN_DAYS", 5)
+
     tracks = {}
     for name in ("intraday", "positional"):
         track = dict((result.get("tracks") or {}).get(name) or {})
         confidence = track.get("confidence")
-        track["fired"] = bool(
-            track.get("verdict") == "BUY"
-            and confidence is not None
-            and confidence >= threshold
-        )
+        qualifies = (track.get("verdict") == "BUY"
+                     and confidence is not None
+                     and confidence >= threshold)
+
+        # A BUY that is already on does not need firing again. Without this
+        # the same position is re-sent to Telegram every morning it still
+        # qualifies, which reads as five signals instead of one.
+        if qualifies:
+            try:
+                with db() as conn:
+                    held = history.in_cooldown(conn, symbol, name, cooldown_days)
+            except Exception:                                      # noqa: BLE001
+                held = None
+            if held:
+                qualifies = False
+                track["suppressed"] = held
+                log(f"{symbol} [{name}]: BUY not re-sent — {held}")
+
+        track["fired"] = qualifies
         tracks[name] = track
 
     return {
@@ -530,6 +618,13 @@ def run_cycle(mode):
 
         log(f"run #{run_id} started · mode={mode} · engine={engine_label} "
             f"({provider.get('reason')}) · BUY threshold {threshold}/10")
+
+        # settle yesterday's calls before making today's
+        board = review_outcomes()
+        board_line = history.scoreboard_line(board) if board else ""
+        with LOCK:
+            STATE["scoreboard"] = board
+            STATE["scoreboard_line"] = board_line
 
         # ---- Scout --------------------------------------------------------
         set_agent("scout", status="working")
@@ -623,10 +718,16 @@ def run_cycle(mode):
         log(f"debating {len(shortlist)} stocks, {workers} at a time")
         with futures.ThreadPoolExecutor(max_workers=workers,
                                         thread_name_prefix="debate") as pool:
-            pending = {
-                pool.submit(llm.evaluate, bundle, provider=provider, log=log): position
-                for position, bundle in enumerate(shortlist)
-            }
+            pending = {}
+            for position, bundle in enumerate(shortlist):
+                try:
+                    with db() as conn:
+                        recall = history.memory_for(conn, bundle.get("symbol"))
+                except Exception:                                  # noqa: BLE001
+                    recall = {}
+                pending[pool.submit(llm.evaluate, bundle, provider=provider,
+                                    log=log, memory=recall,
+                                    scoreboard_line=board_line)] = position
             for future in futures.as_completed(pending):
                 position = pending[future]
                 bundle = shortlist[position]
@@ -800,6 +901,8 @@ def _public_track(track):
         "net": track.get("net"),
         "fired": bool(track.get("fired")),
         "gated": bool(track.get("gated")),
+        "suppressed": track.get("suppressed"),
+        "risk_reward": track.get("risk_reward") or {},
     }
 
 
@@ -813,6 +916,8 @@ def _public_verdict(row):
         "price": row["price"],
         "day_change_pct": row["day_change_pct"],
         "market_phase": row.get("market_phase"),
+        "rel_day_change_pct": ((row.get("evidence") or {}).get("relative") or {})
+                              .get("rel_day_change_pct"),
         "tracks": {name: _public_track(t) for name, t in row["tracks"].items()},
         "engine": row["engine"],
         "data_gaps": len(row["data_gaps"]),
@@ -870,35 +975,87 @@ def config():
         "db": os.path.basename(DB_PATH),
         "market": market.describe(),
         "tracks": list(scoring.TRACKS),
+        "scheduler": SCHEDULER.status() if SCHEDULER else {"enabled": False},
+        "signal_cooldown_days": env_int("SIGNAL_COOLDOWN_DAYS", 5),
     })
 
 
-@app.post("/start")
-def start():
+def begin_run(mode, trigger="manual"):
+    """
+    Start a cycle. Shared by the button and the scheduler.
+
+    Returns (ok, message) so an unattended trigger can log why it was skipped
+    rather than silently doing nothing.
+    """
     global WORKER
 
-    payload = request.get_json(silent=True) or {}
-    mode = str(payload.get("mode") or "demo").strip().lower()
     if mode not in ("demo", "live"):
-        return jsonify({"ok": False, "error": f"unknown mode {mode!r}"}), 400
+        return False, f"unknown mode {mode!r}"
 
     with LOCK:
         if STATE.get("status") == "running":
-            return jsonify({"ok": False, "error": "a run is already in progress"}), 409
+            return False, "a run is already in progress"
         STATE.clear()
         STATE.update(fresh_state())
         STATE["mode"] = mode
+        STATE["trigger"] = trigger
 
     WORKER = threading.Thread(target=run_cycle, args=(mode,),
                               name="agent-cycle", daemon=True)
     WORKER.start()
+    return True, "started"
+
+
+@app.post("/start")
+def start():
+    payload = request.get_json(silent=True) or {}
+    mode = str(payload.get("mode") or "demo").strip().lower()
+
+    ok, message = begin_run(mode, trigger="manual")
+    if not ok:
+        code = 400 if message.startswith("unknown mode") else 409
+        return jsonify({"ok": False, "error": message}), code
     return jsonify({"ok": True, "mode": mode})
+
+
+@app.get("/scheduler")
+def scheduler_status():
+    return jsonify(SCHEDULER.status() if SCHEDULER else {"enabled": False})
+
+
+@app.get("/scoreboard")
+def scoreboard_route():
+    """The desk's own record: what past signals actually did."""
+    try:
+        with db() as conn:
+            board = history.scoreboard(conn)
+            open_rows = history.open_signals(conn)
+            settled = [dict(r) for r in conn.execute(
+                """SELECT symbol, track, status, return_pct, fired_at, resolved_at,
+                          entry_price, exit_price
+                   FROM outcomes WHERE status != 'open'
+                   ORDER BY resolved_at DESC LIMIT 25""")]
+    except Exception as exc:                                       # noqa: BLE001
+        return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
+
+    return jsonify({
+        "scoreboard": board,
+        "summary": history.scoreboard_line(board),
+        "open": [{k: r[k] for k in ("symbol", "track", "fired_at", "entry_price",
+                                    "objective", "invalidation",
+                                    "max_favourable_pct", "max_adverse_pct")}
+                 for r in open_rows],
+        "settled": settled,
+    })
 
 
 @app.get("/status")
 def status():
     with LOCK:
-        return jsonify(json.loads(json.dumps(STATE, default=str)))
+        snapshot = json.loads(json.dumps(STATE, default=str))
+    snapshot["scheduler"] = SCHEDULER.status() if SCHEDULER else {"enabled": False}
+    snapshot["market"] = market.describe()
+    return jsonify(snapshot)
 
 
 # ==========================================================================
@@ -919,6 +1076,15 @@ def main():
         STATE.clear()
         STATE.update(fresh_state())
 
+    global SCHEDULER
+    SCHEDULER = scheduler_mod.Scheduler(
+        times=env_str("SCHEDULE_TIMES", scheduler_mod.DEFAULT_TIMES),
+        trigger=lambda mode: begin_run(mode, trigger="scheduled"),
+        mode=env_str("SCHEDULE_MODE", "live"),
+        log=log,
+        enabled=env_str("SCHEDULE_ENABLED", "1") not in ("0", "false", "no"),
+    )
+
     provider = llm.detect_provider()
     url = f"http://127.0.0.1:{PORT}"
 
@@ -928,6 +1094,9 @@ def main():
     print(f"  engine    : {provider['label']}  ({provider['reason']})")
     print(f"  telegram  : {'configured' if telegram_configured() else 'NOT configured — see .env.example'}")
     print(f"  audit db  : {DB_PATH}")
+    print(f"  schedule  : "
+          f"{SCHEDULER.pretty_times()} IST ({SCHEDULER.mode} mode)"
+          if SCHEDULER.enabled else "  schedule  : disabled")
     print(f"  dashboard : {url}")
     print("  analysis only — this app never places an order")
     print("=" * 68, flush=True)
@@ -935,6 +1104,10 @@ def main():
     # NO_BROWSER=1 keeps the tab from opening (handy for headless testing)
     if not os.environ.get("WERKZEUG_RUN_MAIN") and env_str("NO_BROWSER") not in ("1", "true"):
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+
+    with LOCK:
+        STATE.setdefault("log", [])
+    SCHEDULER.start()
 
     app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
 

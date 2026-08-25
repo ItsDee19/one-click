@@ -160,7 +160,44 @@ def _no_llm(reason):
 # prompt
 # --------------------------------------------------------------------------
 
-def build_prompt(evidence: dict) -> str:
+def _memory_section(memory: dict, scoreboard_line: str) -> str:
+    """
+    What the desk already said about this stock, and how it has done overall.
+
+    Given to the panel as context, not as an instruction: a previous BUY that
+    was invalidated is a reason to look harder, not a reason to flip. The
+    prompt says so explicitly, because a model shown its own past call will
+    otherwise either anchor to it or over-correct against it.
+    """
+    if not memory and not scoreboard_line:
+        return ""
+
+    lines = ["=== THE DESK'S OWN RECORD ==="]
+    if scoreboard_line:
+        lines.append(f"Track record so far: {scoreboard_line}.")
+
+    for track, previous in (memory or {}).items():
+        when = str(previous.get("created_at") or "")[:16].replace("T", " ")
+        bits = [f"{track}: called {previous.get('verdict')} "
+                f"{previous.get('confidence')}/10 on {when} at "
+                f"{previous.get('price')}"]
+        status = previous.get("status")
+        if status and status != "open":
+            bits.append(f"that signal resolved as {status} "
+                        f"({previous.get('return_pct')}%)")
+        elif status == "open":
+            bits.append("that signal is still open")
+        lines.append(" — ".join(bits))
+
+    lines.append(
+        "Use this as context only. A previous call is not evidence about today: "
+        "do not anchor to it, and do not flip away from it to look decisive. "
+        "Judge the bundle in front of you."
+    )
+    return "\n".join(lines) + "\n\n"
+
+
+def build_prompt(evidence: dict, memory: dict = None, scoreboard_line: str = "") -> str:
     gaps = evidence.get("data_gaps") or []
     gap_line = ", ".join(gaps) if gaps else "none — every field computed"
     trimmed = {k: v for k, v in evidence.items()
@@ -190,8 +227,18 @@ def build_prompt(evidence: dict) -> str:
             f"{intraday.get('reason')}. The intraday track must return UNAVAILABLE."
         )
 
+    relative = evidence.get("relative") or {}
+    if relative.get("rel_day_change_pct") is not None:
+        session_line += (
+            f" The {relative.get('benchmark')} is "
+            f"{relative.get('benchmark_day_change_pct'):+.2f}% today, so this stock is "
+            f"{relative.get('rel_day_change_pct'):+.2f}% relative to it — judge strength "
+            f"against the index, not in isolation."
+        )
+
     return (
         f"{SYSTEM_PROMPT}\n\n"
+        f"{_memory_section(memory, scoreboard_line)}"
         f"=== MARKET CONTEXT ===\n{session_line}\n\n"
         f"=== HOLDING WINDOW (computed, do not restate a different one) ===\n"
         f"{window['label']} — {window['basis']}\n\n"
@@ -533,6 +580,7 @@ def normalise(payload: dict, evidence: dict, engine_label: str) -> dict:
         "levels": scoring._positional_levels(evidence),
     })
 
+    positional = scoring._apply_rr_gate(positional, evidence, scoring.MIN_RR_POSITIONAL)
     intraday = _gate_intraday(intraday, evidence)
 
     return {
@@ -589,6 +637,13 @@ def _gate_intraday(intraday: dict, evidence: dict) -> dict:
     if minutes_left < scoring.INTRADAY_MIN_MINUTES_LEFT:
         blockers.append(f"only {minutes_left} minutes remain in the session")
 
+    rr = scoring.risk_reward((evidence.get("price") or {}).get("live"),
+                             intraday.get("levels"))
+    intraday["risk_reward"] = rr
+    if rr["ratio"] is not None and rr["ratio"] < scoring.MIN_RR_INTRADAY:
+        blockers.append(f"reward/risk {rr['ratio']}:1 is under "
+                        f"{scoring.MIN_RR_INTRADAY}:1")
+
     if blockers:
         intraday["verdict"] = "WATCH"
         intraday["confidence"] = min(6, intraday["confidence"])
@@ -605,7 +660,8 @@ def _gate_intraday(intraday: dict, evidence: dict) -> dict:
 # public interface
 # --------------------------------------------------------------------------
 
-def evaluate(evidence: dict, provider: dict = None, env=None, log=None) -> dict:
+def evaluate(evidence: dict, provider: dict = None, env=None, log=None,
+             memory: dict = None, scoreboard_line: str = "") -> dict:
     """
     Run the LLM debate for one stock.
 
@@ -622,7 +678,7 @@ def evaluate(evidence: dict, provider: dict = None, env=None, log=None) -> dict:
         out["fallback_reason"] = provider.get("reason")
         return out
 
-    prompt = build_prompt(evidence)
+    prompt = build_prompt(evidence, memory=memory, scoreboard_line=scoreboard_line)
     try:
         if name == "claude_code":
             raw = call_claude_code(prompt, provider["model"], env)

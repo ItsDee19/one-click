@@ -232,6 +232,98 @@ figures are kept:
 
 ---
 
+## The unattended schedule
+
+The app runs itself at the two moments in an NSE day when the answer changes:
+
+| Time (IST) | Purpose |
+|---|---|
+| **09:00** | pre-open — the positional shortlist is fully computable before the bell; intraday is a watchlist with levels |
+| **09:45** | confirmation — the opening range has printed and RVOL has a real sample, so intraday verdicts become live |
+
+Weekdays only. Holidays are not guessed from a hardcoded calendar: the run
+starts, the feed reports the market closed, and the intraday track says so.
+
+```bash
+SCHEDULE_ENABLED=1
+SCHEDULE_TIMES=09:00,09:45
+SCHEDULE_MODE=live
+```
+
+Add times freely (`09:00,09:45,14:30`). The dashboard shows the next run, and
+`GET /scheduler` returns it as JSON. No cron, no APScheduler — a daemon thread
+compares the clock every 20 seconds and fires once per slot per day.
+
+The machine has to be awake with `python app.py` running.
+
+---
+
+## Memory: the desk grades its own homework
+
+Every fired signal is followed until it resolves:
+
+- **objective** — the high touched the target first
+- **invalidated** — the low broke the stop first
+- **expired** — the horizon ran out with neither hit
+
+Resolved against daily OHLC, so an intraday spike through a level counts, not
+just the close. When both levels are touched on the same daily bar the order is
+unknowable from daily data, so it settles as *invalidated* — assuming the worse
+fill is the only honest choice.
+
+That produces a real track record, shown on the dashboard and handed to the
+panel in its own prompt:
+
+```
+Track record so far: positional 33.3% of 3 (+2.50% avg).
+positional: called BUY 8/10 on 2026-08-20 at 100.0 — that signal resolved as
+objective (10.0%)
+```
+
+The prompt explicitly tells the panel this is context, not instruction — a
+previous BUY that was invalidated is a reason to look harder, not to flip.
+
+**A signal that is already open does not fire again.** Without this the same
+position is re-sent to Telegram every morning it still qualifies, which reads
+as five signals instead of one:
+
+```
+KPITTECH [positional]: BUY not re-sent — positional signal from 25 Aug
+still open at 1548.6 (5d cooldown)
+```
+
+Intraday signals are capped at one per stock per day. `GET /scoreboard` returns
+the full record.
+
+---
+
+## Three more quality gates
+
+**Relative strength.** A stock up 3% on a day the NIFTY is up 3% is not strong.
+The index is pulled alongside the universe in the same request, and the screen
+now ranks on strength *relative* to it, adjusted for participation:
+
+```
+score = relative day change % + 1.5 x (RVOL - 1)
+```
+
+Previously the screen ranked on raw day change, so a stock up 5% on dead volume
+beat one up 2% on four times its usual volume.
+
+**Risk/reward.** Every BUY is checked against its own levels. Reward under
+1.5x risk is held to WATCH no matter how high the conviction, because score
+alone cannot see that a setup risks more than it stands to make:
+
+```
+Held to WATCH on risk/reward: 4.0% to the objective against 5.0% to the
+invalidation is 0.8:1, under the 1.5:1 the desk requires.
+```
+
+**Earnings awareness.** A print inside the next seven days is a binary event
+the Bear now scores, and the date is named in the evidence.
+
+---
+
 ## Scoring
 
 Both engines implement one interface:
@@ -298,6 +390,11 @@ file. `.env` is never read by the browser and never leaves the machine.
 | `SHORTLIST_PER_BUCKET` | `4` | movers per cap bucket sent to debate |
 | `PORT` | `5000` | web server port |
 | `NO_BROWSER` | — | set to `1` to stop the tab opening itself |
+| `SCHEDULE_ENABLED` | `1` | run automatically at the scheduled times |
+| `SCHEDULE_TIMES` | `09:00,09:45` | IST times, weekdays only |
+| `SCHEDULE_MODE` | `live` | mode used by scheduled runs |
+| `SIGNAL_COOLDOWN_DAYS` | `5` | don't re-send a positional BUY still open |
+| `LLM_CONCURRENCY` | `3` | stocks debated at once |
 
 ---
 
@@ -306,6 +403,8 @@ file. `.env` is never read by the browser and never leaves the machine.
 ```
 app.py            server, agent state machine, Telegram, SQLite
 market.py         NSE trading phase + session-elapsed maths
+scheduler.py      unattended 09:00 / 09:45 runs
+history.py        outcome tracking, track record, signal cooldown
 scoring.py        deterministic agents + both Judges
 llm.py            LLM debate, provider detection, grounding verifier
 data_sources.py   demo loader, yfinance adapter, evidence builder
@@ -323,7 +422,9 @@ signals.db        SQLite audit (created on first run)
 | `GET /` | the dashboard |
 | `POST /start` | `{"mode": "demo"\|"live"}` — starts a run on a background thread |
 | `GET /status` | full state as JSON (the page polls this every 500 ms) |
-| `GET /config` | brand, agents, engine, thresholds, universe counts |
+| `GET /config` | brand, agents, engine, thresholds, universe counts, schedule |
+| `GET /scheduler` | next scheduled run and the last one fired |
+| `GET /scoreboard` | the desk's own record: open and settled signals |
 
 ### Audit
 
@@ -358,5 +459,10 @@ sqlite3 signals.db "select symbol, track, verdict, confidence, horizon, fired fr
   supports one.
 - Intraday verdicts go stale in minutes. A BUY read at 10:15 is a statement
   about 10:15.
+- The track record is a record, not a forecast. A handful of settled signals
+  says almost nothing; treat a hit rate under ~30 samples as noise.
+- Outcomes are resolved on daily bars, so a level touched intraday and
+  reversed still counts as touched. That is deliberate but it is not the same
+  as a fill.
 - No order is ever placed. There is no broker integration and no code path that
   could create one.
