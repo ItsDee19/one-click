@@ -1,0 +1,196 @@
+{
+ "_comment": "Order book values, in Rs crore, maintained by hand. These are NOT available from any machine-readable feed: not from the price feed, and not as a structured field on NSE or BSE (both return 403 to programmatic requests). Order book is disclosed as prose inside investor-presentation PDFs, so it is entered here deliberately rather than scraped and misparsed.",
+ "_how_to_fill": [
+  "1. Open the company's investor page or BSE/NSE announcements in a browser.",
+  "2. Find the latest quarterly investor presentation or earnings release.",
+  "3. Look for 'Order Book', 'Order Backlog' or 'Unexecuted Order Book'.",
+  "4. Enter the value in Rs crore, the disclosure date as YYYY-MM-DD, and the URL.",
+  "5. Entries older than 120 days are flagged stale in the UI."
+ ],
+ "_example": {
+  "SOMECO": {
+   "name": "Some Company Ltd",
+   "order_book_cr": 52000,
+   "as_of": "2026-07-15",
+   "source": "https://www.somecompany.com/investors/q1fy27-presentation.pdf",
+   "note": "consolidated, excludes L1 orders"
+  }
+ },
+ "companies": {
+  "ABB": {
+   "name": "ABB India Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "ADANIPORTS": {
+   "name": "Adani Ports and Special Economic Zone Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "ASHOKLEY": {
+   "name": "Ashok Leyland Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "ASTRAL": {
+   "name": "Astral Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "BEL": {
+   "name": "Bharat Electronics Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "CGPOWER": {
+   "name": "CG Power and Industrial Solutions Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "CUMMINSIND": {
+   "name": "Cummins India Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "CYIENT": {
+   "name": "Cyient Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "ENGINERSIN": {
+   "name": "Engineers India Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "GRAVITA": {
+   "name": "Gravita India Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "HAL": {
+   "name": "Hindustan Aeronautics Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "IRCON": {
+   "name": "Ircon International Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "KEC": {
+   "name": "KEC International Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "KIRLOSENG": {
+   "name": "Kirloskar Oil Engines Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "LT": {
+   "name": "Larsen & Toubro Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "NBCC": {
+   "name": "NBCC (India) Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "NTPC": {
+   "name": "NTPC Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "PNCINFRA": {
+   "name": "PNC Infratech Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "POLYCAB": {
+   "name": "Polycab India Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "POWERGRID": {
+   "name": "Power Grid Corporation of India Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "RVNL": {
+   "name": "Rail Vikas Nigam Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "SIEMENS": {
+   "name": "Siemens Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "SRF": {
+   "name": "SRF Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "SUPREMEIND": {
+   "name": "The Supreme Industries Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  },
+  "THERMAX": {
+   "name": "Thermax Limited",
+   "order_book_cr": null,
+   "as_of": null,
+   "source": null,
+   "note": "fill from the latest investor presentation / earnings release"
+  }
+ }
+}

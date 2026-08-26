@@ -114,13 +114,13 @@ def detect_provider(env=None) -> dict:
     openai_key = (env.get("OPENAI_API_KEY") or "").strip()
 
     def claude_code():
-        model = (env.get("CLAUDE_CLI_MODEL") or "haiku").strip() or "haiku"
+        model = (env.get("CLAUDE_CLI_MODEL") or "sonnet").strip() or "sonnet"
         return {"provider": "claude_code", "model": model,
                 "label": f"claude cli ({model})",
                 "reason": f"claude CLI found at {cli}"}
 
     def anthropic():
-        model = (env.get("ANTHROPIC_MODEL") or "claude-haiku-4-5-20251001").strip()
+        model = (env.get("ANTHROPIC_MODEL") or "claude-sonnet-5").strip()
         return {"provider": "anthropic", "model": model,
                 "label": f"anthropic api ({model})", "reason": "ANTHROPIC_API_KEY set"}
 
@@ -261,9 +261,9 @@ def build_prompt(evidence: dict, memory: dict = None, scoreboard_line: str = "",
 def _timeout(env=None):
     env = env if env is not None else os.environ
     try:
-        return max(15, int(float(env.get("LLM_TIMEOUT") or 150)))
+        return max(15, int(float(env.get("LLM_TIMEOUT") or 240)))
     except (TypeError, ValueError):
-        return 150
+        return 240
 
 
 def call_claude_code(prompt: str, model: str, env=None) -> str:

@@ -405,6 +405,66 @@ correlated, not independent positions
 
 ---
 
+## Sector heatmap
+
+Two independent readings, because either alone misleads:
+
+- **index move** — the NSE sector indices, in one batched request
+- **breadth** — how many names in the universe advanced, and by how much
+
+An index can be dragged up by one heavyweight while most of its constituents
+fall. A sector is only "leading" when both agree, and disagreement is reported
+rather than hidden:
+
+```
+sector                     index%  median%     breadth  state
+Basic Materials               n/a    +0.57       11/13  leading
+Financial Services          +0.47    +0.29       18/31  mixed
+Technology                  -1.47    -0.58        5/22  lagging
+```
+
+Financial Services there is the point: the index is up, but barely half the
+sector participated, so it is flagged `mixed` — *the move is not broad-based*.
+
+Index rows that fail to resolve (the feed drops symbols under load) are
+retried individually and then fall back to breadth alone, which is computed
+from the universe download and always available. `GET /sectors`.
+
+---
+
+## Order book vs quarterly sales
+
+Companies whose contracted order book exceeds their latest quarterly revenue
+have visible work ahead. `GET /orderbook`, and the list appears above the
+verdict feed on every live run.
+
+**One of the two numbers cannot be fetched.**
+
+| | Source |
+|---|---|
+| Quarterly sales | fetched live from the quarterly income statement — real, dated, verifiable |
+| Order book | **not machine-readable anywhere** |
+
+Order book is not in the price feed and is not a structured field on NSE or
+BSE — both return 403 to programmatic requests in any case. It is disclosed as
+prose inside investor-presentation PDFs. Scraping and regexing a PDF for a
+financial number risks a silent misparse, which is worse than no number.
+
+So order book values live in **`orderbook.json`**, entered by hand from company
+disclosures with a source URL and an as-of date. The file is pre-seeded with
+every order-driven company in the universe; entries older than 120 days are
+flagged stale. A company with no entry is reported as a gap and never guessed.
+
+```json
+"BEL": {"order_book_cr": 71000, "as_of": "2026-07-15",
+        "source": "https://bel-india.in/.../q1fy27-presentation.pdf"}
+```
+
+The ratio is only as fresh as that file. That is a real limitation, stated
+rather than papered over.
+
+---
+
 ## Backtest: the panel is currently anti-predictive
 
 `backtest.py` replays the deterministic engine over historical daily bars,
@@ -683,6 +743,9 @@ file. `.env` is never read by the browser and never leaves the machine.
 ```
 app.py            server, agent state machine, Telegram, SQLite
 backtest.py       point-in-time historical replay of the scoring engine
+sectors.py        sector heatmap: index moves + universe breadth
+fundamentals.py   order book vs quarterly sales screen
+orderbook.json    hand-maintained order book values (not fetchable)
 market.py         NSE trading phase + session-elapsed maths
 portfolio.py      position sizing, risk limits, paper account (no broker)
 research.py       public RSS with prompt-injection defences
@@ -708,6 +771,8 @@ signals.db        SQLite audit (created on first run)
 | `GET /config` | brand, agents, engine, thresholds, universe counts, schedule |
 | `GET /scheduler` | next scheduled run and the last one fired |
 | `GET /scoreboard` | the desk's own record: open signals, settled outcomes, hit rates with confidence intervals, and confidence calibration |
+| `GET /sectors` | sector heatmap: index moves, breadth, leaders and laggards |
+| `GET /orderbook` | stocks whose order book exceeds last quarter's sales |
 | `GET /portfolio` | the paper account: equity, open positions, closed trades, headroom |
 
 ### Audit

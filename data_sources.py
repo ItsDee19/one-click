@@ -47,6 +47,10 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 BUCKETS = ("large", "mid", "small")
 
+# The most recent screen's quotes, so the sector heatmap can compute breadth
+# without paying for a second download of the same bars.
+LAST_QUOTES = {}
+
 NO_RATIOS_NOTE = (
     "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). "
     "The fundamental view is limited to sell-side analyst targets and consensus."
@@ -902,6 +906,7 @@ def scan_live(universe: dict, shortlist_per_bucket: int, log=None):
     """Return (universe_count, shortlisted_evidence_bundles) for live mode."""
     say = log or (lambda _m: None)
     quotes, benchmark = fetch_quotes(universe, log=say)
+    globals()["LAST_QUOTES"] = quotes
 
     screened = []
     for bucket in BUCKETS:

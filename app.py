@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, jsonify, request
 
 import data_sources
+import fundamentals
 import history
 import llm
 import market
@@ -32,6 +33,7 @@ import portfolio
 import research
 import scheduler as scheduler_mod
 import scoring
+import sectors
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(HERE, "signals.db")
@@ -200,6 +202,8 @@ def fresh_state():
         "calibration_line": "",
         "concentration": None,
         "portfolio": {},
+        "sector_heat": {},
+        "orderbook": {},
         "capital": None,
         "agents": fresh_agents(),
         "verdicts": [],
@@ -797,6 +801,26 @@ def run_cycle(mode, capital=None):
             bundles, shortlist = data_sources.scan_demo(shortlist_per_bucket, log=log)
             universe_count = len(bundles)
 
+        # Sector heatmap + book-to-sales screen. Both run off data the scan
+        # already fetched, so they cost one extra request between them.
+        if mode == "live":
+            try:
+                heat = sectors.heatmap(data_sources.LAST_QUOTES, log=log)
+                with LOCK:
+                    STATE["sector_heat"] = heat
+            except Exception as exc:                               # noqa: BLE001
+                log(f"sector heatmap skipped ({type(exc).__name__})")
+
+        try:
+            universe_for_screen = (data_sources.load_universe()
+                                   if mode == "live" else {})
+            if universe_for_screen:
+                book = fundamentals.screen(universe_for_screen, log=log)
+                with LOCK:
+                    STATE["orderbook"] = book
+        except Exception as exc:                                   # noqa: BLE001
+            log(f"book-to-sales screen skipped ({type(exc).__name__}: {scrub(exc)})")
+
         if not shortlist:
             raise RuntimeError(
                 "no evidence bundles were produced — "
@@ -1257,6 +1281,29 @@ def start():
 @app.get("/scheduler")
 def scheduler_status():
     return jsonify(SCHEDULER.status() if SCHEDULER else {"enabled": False})
+
+
+@app.get("/sectors")
+def sectors_route():
+    """Sector heatmap: index moves plus breadth across the universe."""
+    with LOCK:
+        heat = STATE.get("sector_heat") or {}
+    if heat:
+        return jsonify(heat)
+    try:
+        quotes, _bench = data_sources.fetch_quotes(data_sources.load_universe(), log=log)
+        return jsonify(sectors.heatmap(quotes, log=log))
+    except Exception as exc:                                       # noqa: BLE001
+        return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
+
+
+@app.get("/orderbook")
+def orderbook_route():
+    """Stocks whose order book exceeds their latest quarterly sales."""
+    try:
+        return jsonify(fundamentals.screen(data_sources.load_universe(), log=log))
+    except Exception as exc:                                       # noqa: BLE001
+        return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 
 
 @app.get("/portfolio")

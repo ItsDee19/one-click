@@ -1,41 +1,829 @@
 {
-  "_comment": "Editable NSE universe. Tickers must end in .NS for yfinance. Buckets are scanned independently and the top SHORTLIST_PER_BUCKET movers from each go to debate.",
-  "large": [
-    { "ticker": "RELIANCE.NS", "name": "Reliance Industries", "sector": "Energy / Conglomerate" },
-    { "ticker": "TCS.NS", "name": "Tata Consultancy Services", "sector": "Information Technology" },
-    { "ticker": "HDFCBANK.NS", "name": "HDFC Bank", "sector": "Banking" },
-    { "ticker": "INFY.NS", "name": "Infosys", "sector": "Information Technology" },
-    { "ticker": "ICICIBANK.NS", "name": "ICICI Bank", "sector": "Banking" },
-    { "ticker": "LT.NS", "name": "Larsen & Toubro", "sector": "Capital Goods" },
-    { "ticker": "BHARTIARTL.NS", "name": "Bharti Airtel", "sector": "Telecom" },
-    { "ticker": "TMPV.NS", "name": "Tata Motors Passenger Vehicles", "sector": "Automobile" },
-    { "ticker": "SBIN.NS", "name": "State Bank of India", "sector": "Banking" },
-    { "ticker": "AXISBANK.NS", "name": "Axis Bank", "sector": "Banking" },
-    { "ticker": "SUNPHARMA.NS", "name": "Sun Pharmaceutical", "sector": "Pharmaceuticals" },
-    { "ticker": "TITAN.NS", "name": "Titan Company", "sector": "Consumer Discretionary" }
-  ],
-  "mid": [
-    { "ticker": "DIXON.NS", "name": "Dixon Technologies", "sector": "Electronics Manufacturing" },
-    { "ticker": "PERSISTENT.NS", "name": "Persistent Systems", "sector": "Information Technology" },
-    { "ticker": "POLYCAB.NS", "name": "Polycab India", "sector": "Electricals" },
-    { "ticker": "TATAELXSI.NS", "name": "Tata Elxsi", "sector": "Design & Technology" },
-    { "ticker": "ASTRAL.NS", "name": "Astral Ltd", "sector": "Building Materials" },
-    { "ticker": "COFORGE.NS", "name": "Coforge", "sector": "Information Technology" },
-    { "ticker": "MUTHOOTFIN.NS", "name": "Muthoot Finance", "sector": "NBFC" },
-    { "ticker": "PIIND.NS", "name": "PI Industries", "sector": "Agrochemicals" },
-    { "ticker": "SUPREMEIND.NS", "name": "Supreme Industries", "sector": "Plastics" },
-    { "ticker": "BSE.NS", "name": "BSE Ltd", "sector": "Capital Markets" }
-  ],
-  "small": [
-    { "ticker": "KPITTECH.NS", "name": "KPIT Technologies", "sector": "Auto Software" },
-    { "ticker": "CDSL.NS", "name": "Central Depository Services", "sector": "Capital Markets" },
-    { "ticker": "AMBER.NS", "name": "Amber Enterprises", "sector": "Consumer Durables" },
-    { "ticker": "CAMS.NS", "name": "Computer Age Management", "sector": "Financial Services" },
-    { "ticker": "ANGELONE.NS", "name": "Angel One", "sector": "Broking" },
-    { "ticker": "RAINBOW.NS", "name": "Rainbow Children's Medicare", "sector": "Healthcare" },
-    { "ticker": "ERIS.NS", "name": "Eris Lifesciences", "sector": "Pharmaceuticals" },
-    { "ticker": "NEWGEN.NS", "name": "Newgen Software", "sector": "Information Technology" },
-    { "ticker": "GRAVITA.NS", "name": "Gravita India", "sector": "Recycling" },
-    { "ticker": "TRIVENI.NS", "name": "Triveni Turbine", "sector": "Capital Goods" }
-  ]
+ "_comment": "Editable NSE universe, validated against live price and volume data. Tickers must end in .NS. Buckets are scanned independently and the top SHORTLIST_PER_BUCKET names from each go to debate. Sectors come from the exchange feed and drive sector-relative strength and the concentration check.",
+ "large": [
+  {
+   "ticker": "RELIANCE.NS",
+   "name": "Reliance Industries Limited",
+   "sector": "Energy"
+  },
+  {
+   "ticker": "BHARTIARTL.NS",
+   "name": "Bharti Airtel Limited",
+   "sector": "Communication Services"
+  },
+  {
+   "ticker": "HDFCBANK.NS",
+   "name": "HDFC Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "ICICIBANK.NS",
+   "name": "ICICI Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "SBIN.NS",
+   "name": "State Bank of India",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "TCS.NS",
+   "name": "Tata Consultancy Services Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "BAJFINANCE.NS",
+   "name": "Bajaj Finance Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "LT.NS",
+   "name": "Larsen & Toubro Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "HINDUNILVR.NS",
+   "name": "Hindustan Unilever Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "SUNPHARMA.NS",
+   "name": "Sun Pharmaceutical Industries Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "INFY.NS",
+   "name": "Infosys Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "TITAN.NS",
+   "name": "Titan Company Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "ADANIENT.NS",
+   "name": "Adani Enterprises Limited",
+   "sector": "Energy"
+  },
+  {
+   "ticker": "MARUTI.NS",
+   "name": "Maruti Suzuki India Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "KOTAKBANK.NS",
+   "name": "Kotak Mahindra Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "M&M.NS",
+   "name": "Mahindra & Mahindra Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "AXISBANK.NS",
+   "name": "Axis Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "ADANIPORTS.NS",
+   "name": "Adani Ports and Special Economic Zone Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "HCLTECH.NS",
+   "name": "HCL Technologies Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "ULTRACEMCO.NS",
+   "name": "UltraTech Cement Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "ITC.NS",
+   "name": "ITC Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "JSWSTEEL.NS",
+   "name": "JSW Steel Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "HAL.NS",
+   "name": "Hindustan Aeronautics Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "NTPC.NS",
+   "name": "NTPC Limited",
+   "sector": "Utilities"
+  },
+  {
+   "ticker": "BAJAJ-AUTO.NS",
+   "name": "Bajaj Auto Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "BAJAJFINSV.NS",
+   "name": "Bajaj Finserv Ltd.",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "BEL.NS",
+   "name": "Bharat Electronics Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "ONGC.NS",
+   "name": "Oil and Natural Gas Corporation Limited",
+   "sector": "Energy"
+  },
+  {
+   "ticker": "NESTLEIND.NS",
+   "name": "Nestlé India Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "SHRIRAMFIN.NS",
+   "name": "Shriram Finance Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "ASIANPAINT.NS",
+   "name": "Asian Paints Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "DMART.NS",
+   "name": "Avenue Supermarts Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "COALINDIA.NS",
+   "name": "Coal India Limited",
+   "sector": "Energy"
+  },
+  {
+   "ticker": "POWERGRID.NS",
+   "name": "Power Grid Corporation of India Limited",
+   "sector": "Utilities"
+  },
+  {
+   "ticker": "DIVISLAB.NS",
+   "name": "Divi's Laboratories Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "TATASTEEL.NS",
+   "name": "Tata Steel Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "HINDALCO.NS",
+   "name": "Hindalco Industries Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "GRASIM.NS",
+   "name": "Grasim Industries Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "EICHERMOT.NS",
+   "name": "Eicher Motors Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "TVSMOTOR.NS",
+   "name": "TVS Motor Company Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "TORNTPHARM.NS",
+   "name": "Torrent Pharmaceuticals Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "WIPRO.NS",
+   "name": "Wipro Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "MOTHERSON.NS",
+   "name": "Samvardhana Motherson International Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "ABB.NS",
+   "name": "ABB India Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "JIOFIN.NS",
+   "name": "Jio Financial Services Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "TRENT.NS",
+   "name": "Trent Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "CUMMINSIND.NS",
+   "name": "Cummins India Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "SIEMENS.NS",
+   "name": "Siemens Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "UNIONBANK.NS",
+   "name": "Union Bank of India",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "VBL.NS",
+   "name": "Varun Beverages Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "TECHM.NS",
+   "name": "Tech Mahindra Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "POLYCAB.NS",
+   "name": "Polycab India Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "CGPOWER.NS",
+   "name": "CG Power and Industrial Solutions Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "BSE.NS",
+   "name": "BSE Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "PNB.NS",
+   "name": "Punjab National Bank",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "MUTHOOTFIN.NS",
+   "name": "Muthoot Finance Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "BRITANNIA.NS",
+   "name": "Britannia Industries Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "APOLLOHOSP.NS",
+   "name": "Apollo Hospitals Enterprise Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "BANKBARODA.NS",
+   "name": "Bank of Baroda Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "PFC.NS",
+   "name": "Power Finance Corporation Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "CANBK.NS",
+   "name": "Canara Bank",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "ZYDUSLIFE.NS",
+   "name": "Zydus Lifesciences Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "CIPLA.NS",
+   "name": "Cipla Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "IRFC.NS",
+   "name": "Indian Railway Finance Corporation Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "HEROMOTOCO.NS",
+   "name": "Hero MotoCorp Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "PAYTM.NS",
+   "name": "One97 Communications Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "MARICO.NS",
+   "name": "Marico Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "ASHOKLEY.NS",
+   "name": "Ashok Leyland Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "INDHOTEL.NS",
+   "name": "The Indian Hotels Company Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "TATACONSUM.NS",
+   "name": "Tata Consumer Products Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "OFSS.NS",
+   "name": "Oracle Financial Services Software Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "LAURUSLABS.NS",
+   "name": "Laurus Labs Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "IDBI.NS",
+   "name": "IDBI Bank Limited",
+   "sector": "Financial Services"
+  }
+ ],
+ "mid": [
+  {
+   "ticker": "LUPIN.NS",
+   "name": "Lupin Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "MANKIND.NS",
+   "name": "Mankind Pharma Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "DRREDDY.NS",
+   "name": "Dr. Reddy's Laboratories Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "MAXHEALTH.NS",
+   "name": "Max Healthcare Institute Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "NYKAA.NS",
+   "name": "FSN E-Commerce Ventures Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "BHARATFORG.NS",
+   "name": "Bharat Forge Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "GODREJCP.NS",
+   "name": "Godrej Consumer Products Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "DIXON.NS",
+   "name": "Dixon Technologies (India) Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "PERSISTENT.NS",
+   "name": "Persistent Systems Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "MCX.NS",
+   "name": "Multi Commodity Exchange of India Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "POLICYBZR.NS",
+   "name": "PB Fintech Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "RECLTD.NS",
+   "name": "REC Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "AUBANK.NS",
+   "name": "AU Small Finance Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "COFORGE.NS",
+   "name": "Coforge Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "INDUSINDBK.NS",
+   "name": "IndusInd Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "SRF.NS",
+   "name": "SRF Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "SWIGGY.NS",
+   "name": "Swiggy Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "IDFCFIRSTB.NS",
+   "name": "IDFC First Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "UNOMINDA.NS",
+   "name": "Uno Minda Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "YESBANK.NS",
+   "name": "Yes Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "DABUR.NS",
+   "name": "Dabur India Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "FORTIS.NS",
+   "name": "Fortis Healthcare Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "GLENMARK.NS",
+   "name": "Glenmark Pharmaceuticals Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "BIOCON.NS",
+   "name": "Biocon Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "ASTERDM.NS",
+   "name": "Aster DM Quality Care Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "ALKEM.NS",
+   "name": "Alkem Laboratories Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "SCHAEFFLER.NS",
+   "name": "Schaeffler India Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "BERGEPAINT.NS",
+   "name": "Berger Paints India Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "COLPAL.NS",
+   "name": "Colgate-Palmolive (India) Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "SONACOMS.NS",
+   "name": "Sona BLW Precision Forgings Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "IPCALAB.NS",
+   "name": "Ipca Laboratories Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "RVNL.NS",
+   "name": "Rail Vikas Nigam Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "MPHASIS.NS",
+   "name": "Mphasis Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "BALKRISIND.NS",
+   "name": "Balkrishna Industries Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "SUPREMEIND.NS",
+   "name": "The Supreme Industries Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "THERMAX.NS",
+   "name": "Thermax Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "AJANTPHARM.NS",
+   "name": "Ajanta Pharma Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "NAVINFLUOR.NS",
+   "name": "Navin Fluorine International Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "ENDURANCE.NS",
+   "name": "Endurance Technologies Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "ASTRAL.NS",
+   "name": "Astral Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "NH.NS",
+   "name": "Narayana Hrudayalaya Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "PIIND.NS",
+   "name": "PI Industries Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "HUDCO.NS",
+   "name": "Housing and Urban Development Corporation Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "JUBLFOOD.NS",
+   "name": "Jubilant FoodWorks Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "LALPATHLAB.NS",
+   "name": "Dr. Lal PathLabs Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "TATATECH.NS",
+   "name": "Tata Technologies Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "KIMS.NS",
+   "name": "Krishna Institute of Medical Sciences Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "CDSL.NS",
+   "name": "Central Depository Services (India) Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "KIRLOSENG.NS",
+   "name": "Kirloskar Oil Engines Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "LICHSGFIN.NS",
+   "name": "LIC Housing Finance Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "APOLLOTYRE.NS",
+   "name": "Apollo Tyres Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "BANDHANBNK.NS",
+   "name": "Bandhan Bank Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "IIFL.NS",
+   "name": "IIFL Finance Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "ANGELONE.NS",
+   "name": "Angel One Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "AMBER.NS",
+   "name": "Amber Enterprises India Limited",
+   "sector": "Consumer Cyclical"
+  }
+ ],
+ "small": [
+  {
+   "ticker": "DEEPAKNTR.NS",
+   "name": "Deepak Nitrite Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "NBCC.NS",
+   "name": "NBCC (India) Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "TATAELXSI.NS",
+   "name": "Tata Elxsi Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "GRANULES.NS",
+   "name": "Granules India Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "AARTIIND.NS",
+   "name": "Aarti Industries Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "CAPLIPOINT.NS",
+   "name": "Caplin Point Laboratories Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "CAMS.NS",
+   "name": "Computer Age Management Services Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "ERIS.NS",
+   "name": "Eris Lifesciences Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "POLYMED.NS",
+   "name": "Poly Medicure Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "OLAELEC.NS",
+   "name": "Ola Electric Mobility Limited",
+   "sector": "Consumer Cyclical"
+  },
+  {
+   "ticker": "SYNGENE.NS",
+   "name": "Syngene International Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "KANSAINER.NS",
+   "name": "Kansai Nerolac Paints Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "KPITTECH.NS",
+   "name": "KPIT Technologies Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "NATCOPHARM.NS",
+   "name": "NATCO Pharma Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "VIJAYA.NS",
+   "name": "Vijaya Diagnostic Centre Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "RAINBOW.NS",
+   "name": "Rainbow Children's Medicare Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "ENGINERSIN.NS",
+   "name": "Engineers India Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "GRAVITA.NS",
+   "name": "Gravita India Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "METROPOLIS.NS",
+   "name": "Metropolis Healthcare Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "IRCON.NS",
+   "name": "Ircon International Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "KEC.NS",
+   "name": "KEC International Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "CYIENT.NS",
+   "name": "Cyient Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "IEX.NS",
+   "name": "Indian Energy Exchange Limited",
+   "sector": "Financial Services"
+  },
+  {
+   "ticker": "ZENSARTECH.NS",
+   "name": "Zensar Technologies Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "ALKYLAMINE.NS",
+   "name": "Alkyl Amines Chemicals Limited",
+   "sector": "Basic Materials"
+  },
+  {
+   "ticker": "HCG.NS",
+   "name": "HealthCare Global Enterprises Limited",
+   "sector": "Healthcare"
+  },
+  {
+   "ticker": "INTELLECT.NS",
+   "name": "Intellect Design Arena Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "SONATSOFTW.NS",
+   "name": "Sonata Software Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "NEWGEN.NS",
+   "name": "Newgen Software Technologies Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "TANLA.NS",
+   "name": "Tanla Platforms Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "HAPPSTMNDS.NS",
+   "name": "Happiest Minds Technologies Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "TRIVENI.NS",
+   "name": "Triveni Engineering & Industries Limited",
+   "sector": "Consumer Defensive"
+  },
+  {
+   "ticker": "MAPMYINDIA.NS",
+   "name": "C. E. Info Systems Limited",
+   "sector": "Technology"
+  },
+  {
+   "ticker": "PNCINFRA.NS",
+   "name": "PNC Infratech Limited",
+   "sector": "Industrials"
+  },
+  {
+   "ticker": "ROUTE.NS",
+   "name": "Route Mobile Limited",
+   "sector": "Communication Services"
+  },
+  {
+   "ticker": "NIITMTS.NS",
+   "name": "NIIT Learning Systems Limited",
+   "sector": "Consumer Defensive"
+  }
+ ]
 }

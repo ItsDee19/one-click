@@ -255,6 +255,32 @@
   .up{color:var(--green);} .down{color:var(--red);} .flat{color:var(--muted);}
   .empty{padding:44px 20px;text-align:center;color:var(--muted);font-size:13.5px;}
 
+  /* ---------------- sector + order-book tables ---------------- */
+  .trow{
+    display:grid;gap:14px;align-items:center;padding:11px 18px;
+    border-top:1px solid var(--border);font-size:13px;
+  }
+  .trow:first-child{border-top:0;}
+  .trow.head{
+    background:#fafbfc;border-top:0;padding:9px 18px;font-size:10.5px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600;
+  }
+  .sectrow{grid-template-columns:minmax(120px,1.4fr) 92px 92px 110px minmax(140px,1fr) 96px;}
+  .obrow{grid-template-columns:minmax(120px,1.3fr) 96px 110px 96px minmax(160px,1.6fr);}
+  .pill{
+    display:inline-block;padding:3px 9px;border-radius:999px;
+    font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  }
+  .pill.leading{background:var(--green-soft);color:var(--green);}
+  .pill.lagging{background:var(--red-soft);color:var(--red);}
+  .pill.mixed{background:var(--amber-soft);color:var(--amber);}
+  .pill.neutral{background:#f0f1f4;color:var(--faint);}
+  .num{font-variant-numeric:tabular-nums;}
+  @media (max-width:1000px){
+    .sectrow,.obrow{grid-template-columns:1fr 1fr;}
+    .trow.head{display:none;}
+  }
+
   /* ---------------- log ---------------- */
   details.log{margin-top:22px;}
   details.log summary{
@@ -383,6 +409,18 @@
     <span class="note" id="panelnote">idle — press Start agents</span>
   </div>
   <div class="agents" id="agents"></div>
+
+  <div class="sechead" id="obhead" style="display:none">
+    <h2>Order book &gt; last quarter's sales</h2>
+    <span class="note" id="obnote"></span>
+  </div>
+  <div class="feed" id="obfeed" style="display:none;margin-bottom:30px"></div>
+
+  <div class="sechead" id="secthead" style="display:none">
+    <h2>Sector heatmap</h2>
+    <span class="note" id="sectnote"></span>
+  </div>
+  <div class="feed" id="sectfeed" style="display:none;margin-bottom:30px"></div>
 
   <div class="sechead">
     <h2>Latest verdicts</h2>
@@ -594,6 +632,9 @@
       s.status === "error" ? "run stopped — see the log" :
       "all " + done + " agents done · mode " + s.mode);
 
+    renderSectors(s.sector_heat || {});
+    renderOrderBook(s.orderbook || {});
+
     /* verdict feed */
     var runKey = String(s.run_id) + "|" + String(s.started_at);
     if (runKey !== lastRunKey) { lastRunKey = runKey; renderedVerdicts = 0; el("feed").innerHTML = ""; }
@@ -685,6 +726,75 @@
       feed.insertBefore(row, feed.firstChild);
     });
     renderedVerdicts = verdicts.length;
+  }
+
+  function renderSectors(heat) {
+    var rows = heat.rows || [];
+    var head = el("secthead"), feed = el("sectfeed");
+    if (!rows.length) { head.style.display = "none"; feed.style.display = "none"; return; }
+    head.style.display = ""; feed.style.display = "";
+    text(el("sectnote"), (heat.leaders || []).length
+      ? "leading: " + heat.leaders.slice(0, 3).join(", ")
+      : "no sector is broadly leading today");
+
+    var html = '<div class="trow head sectrow"><div>Sector</div><div>Index</div>' +
+               '<div>Median</div><div>Breadth</div><div>Best / worst</div><div></div></div>';
+    rows.forEach(function (r) {
+      html += '<div class="trow sectrow">' +
+        '<div><b>' + esc(r.sector) + '</b>' +
+          (r.index ? '<div class="subtle">' + esc(r.index) + ' index</div>' : '') + '</div>' +
+        '<div class="num ' + dirClass(r.index_change_pct) + '">' + pct(r.index_change_pct) + '</div>' +
+        '<div class="num ' + dirClass(r.median_move_pct) + '">' + pct(r.median_move_pct) + '</div>' +
+        '<div class="num">' + (r.advancing) + '/' + (r.advancing + r.declining) + ' up' +
+          (r.advance_pct !== null ? ' <span class="subtle">(' + r.advance_pct + '%)</span>' : '') + '</div>' +
+        '<div class="subtle">' + esc(r.best.symbol) + ' ' + pct(r.best.change) +
+          ' · ' + esc(r.worst.symbol) + ' ' + pct(r.worst.change) + '</div>' +
+        '<div><span class="pill ' + esc(r.state) + '">' + esc(r.state) + '</span></div>' +
+        '</div>';
+    });
+    feed.innerHTML = html;
+  }
+
+  function dirClass(v) {
+    return typeof v !== "number" ? "flat" : v > 0 ? "up" : v < 0 ? "down" : "flat";
+  }
+
+  function renderOrderBook(book) {
+    var head = el("obhead"), feed = el("obfeed");
+    var rows = book.qualifying || [];
+    if (!book.generated) { head.style.display = "none"; feed.style.display = "none"; return; }
+    head.style.display = ""; feed.style.display = "";
+    text(el("obnote"), rows.length
+      ? rows.length + " of " + book.with_orderbook + " with an order book on file clear 1.0x"
+      : (book.with_orderbook
+          ? "none of the " + book.with_orderbook + " on file clear 1.0x"
+          : "no order book values on file yet — fill orderbook.json"));
+
+    if (!rows.length) {
+      feed.innerHTML = '<div class="empty">' +
+        (book.with_orderbook
+          ? "No company on file currently has an order book above its last quarter's sales."
+          : "Order book values are not machine-readable on NSE or BSE. Add them to " +
+            "<b>orderbook.json</b> from company investor presentations — " +
+            book.candidates + " order-driven names are already listed there.") +
+        '</div>';
+      return;
+    }
+
+    var html = '<div class="trow head obrow"><div>Stock</div><div>Book / sales</div>' +
+               '<div>Order book</div><div>Q sales</div><div>Reading</div></div>';
+    rows.forEach(function (r) {
+      html += '<div class="trow obrow">' +
+        '<div><b>' + esc(r.symbol) + '</b><div class="subtle">' + esc(r.sector || "") + '</div></div>' +
+        '<div class="num"><b>' + r.book_to_sales + 'x</b>' +
+          (r.stale ? '<div class="subtle">stale</div>' : '') + '</div>' +
+        '<div class="num">₹' + Number(r.order_book_cr).toLocaleString("en-IN") + ' Cr' +
+          (r.order_book_as_of ? '<div class="subtle">' + esc(r.order_book_as_of) + '</div>' : '') + '</div>' +
+        '<div class="num">₹' + Number(r.quarterly_revenue_cr).toLocaleString("en-IN") + ' Cr</div>' +
+        '<div class="subtle" style="white-space:normal">' + esc(r.reason) + '</div>' +
+        '</div>';
+    });
+    feed.innerHTML = html;
   }
 
   function trackCell(label, track) {
