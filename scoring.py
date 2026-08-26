@@ -49,6 +49,12 @@ INTRADAY_MIN_MINUTES_LEFT = 45
 MIN_RR_INTRADAY = 1.5
 MIN_RR_POSITIONAL = 1.5
 
+# When the broad market is below its 200-day average this panel's momentum
+# logic has historically inverted — BUY signals returned -1.49% at ten days
+# against AVOID's +1.06%. Rather than pretend the score still means what it
+# means in an uptrend, BUY is held to WATCH and the reason is stated.
+RESPECT_REGIME = True
+
 # --- holding-window model ---------------------------------------------------
 # Share of a stock's average daily range that accrues as *net* directional
 # drift on a trending day. Stated openly because the whole holding window
@@ -502,6 +508,37 @@ def risk_reward(price, levels) -> dict:
     return out
 
 
+def _apply_regime_gate(verdict_block, ev):
+    """
+    Hold a BUY down when the market is in the state this strategy fails in.
+
+    This is a gate on a standard 200-day filter, not a tuned parameter: the
+    panel scores momentum, momentum crashes in downtrends, and the backtest
+    measured exactly that. A WATCH here is the honest reading, because the
+    evidence supporting the BUY was gathered under conditions that no longer
+    hold.
+    """
+    if not RESPECT_REGIME or verdict_block.get("verdict") != "BUY":
+        return verdict_block
+
+    state = _get(ev, "regime", "state")
+    if state != "risk_off":
+        return verdict_block
+
+    verdict_block["verdict"] = "WATCH"
+    verdict_block["confidence"] = min(6, verdict_block.get("confidence") or 6)
+    verdict_block["gated"] = True
+    verdict_block["regime_gated"] = True
+    verdict_block["rationale"] = (
+        f"Held to WATCH by the regime filter: the {_get(ev, 'regime', 'benchmark')} "
+        f"is {_fmt(_get(ev, 'regime', 'pct_vs_sma'), '%')} against its "
+        f"{_get(ev, 'regime', 'sma_period')}-day average, and this panel's momentum "
+        f"logic has historically inverted below it. "
+        f"Original read: {verdict_block['rationale']}"
+    )
+    return verdict_block
+
+
 def _apply_rr_gate(verdict_block, ev, minimum):
     """Hold a BUY down to WATCH when the levels do not justify it."""
     if verdict_block.get("verdict") != "BUY":
@@ -600,7 +637,7 @@ def judge_positional(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> 
         "horizon_basis": window["basis"],
         "levels": _positional_levels(ev),
     }
-    return _apply_rr_gate(block, ev, MIN_RR_POSITIONAL)
+    return _apply_regime_gate(_apply_rr_gate(block, ev, MIN_RR_POSITIONAL), ev)
 
 
 def judge_intraday(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> dict:

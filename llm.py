@@ -585,6 +585,7 @@ def normalise(payload: dict, evidence: dict, engine_label: str) -> dict:
     })
 
     positional = scoring._apply_rr_gate(positional, evidence, scoring.MIN_RR_POSITIONAL)
+    positional = scoring._apply_regime_gate(positional, evidence)
     intraday = _gate_intraday(intraday, evidence)
 
     return {

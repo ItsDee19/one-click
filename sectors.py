@@ -40,10 +40,49 @@ SECTOR_INDICES = {
 
 BROAD_INDICES = {"^NSEI": "NIFTY 50", "^CRSLDX": "NIFTY 500"}
 
+# Yahoo returns a single bar for period="1mo" on several of these indices —
+# ^CNXAUTO, ^CNXMETAL, ^CNXFMCG and others — while the same symbols return a
+# full series at "3mo". The data is there; the shorter window is simply broken
+# for them. So we request three months and slice back to a month locally.
+INDEX_PERIOD = "3mo"
+MONTH_SESSIONS = 21
+
+# Some index series carry holes — ^CNXAUTO and ^CNXMETAL have gone dark for
+# weeks at a time. Differencing across a hole reports a 40-day move as a day
+# change (+7% on an index, which is nonsense), so the two most recent bars
+# have to be genuinely consecutive sessions before a day change is quoted.
+# Four days covers a weekend plus a holiday.
+MAX_SESSION_GAP_DAYS = 4
+
 LEADING = "leading"
 LAGGING = "lagging"
 MIXED = "mixed"
 NEUTRAL = "neutral"
+
+
+def _series(frame_or_bars):
+    """(closes, dates) from a price frame, NaNs dropped in step."""
+    closes, dates = [], []
+    try:
+        values = frame_or_bars["Close"]
+    except Exception:                                              # noqa: BLE001
+        return closes, dates
+    for stamp, value in values.items():
+        if value != value or value is None:
+            continue
+        closes.append(float(value))
+        try:
+            dates.append(stamp.date())
+        except AttributeError:
+            dates.append(None)
+    return closes, dates
+
+
+def _gap_days(dates):
+    """Calendar days between the last two bars, or None when unknowable."""
+    if not dates or len(dates) < 2 or dates[-1] is None or dates[-2] is None:
+        return None
+    return (dates[-1] - dates[-2]).days
 
 
 def fetch_indices(log=None) -> dict:
@@ -57,22 +96,30 @@ def fetch_indices(log=None) -> dict:
     tickers = list(SECTOR_INDICES) + list(BROAD_INDICES)
     say(f"pulling {len(tickers)} sector and broad indices")
     try:
-        frame = yf.download(" ".join(tickers), period="1mo", interval="1d",
+        frame = yf.download(" ".join(tickers), period=INDEX_PERIOD, interval="1d",
                             group_by="ticker", auto_adjust=False, actions=False,
                             progress=False, threads=True)
     except Exception as exc:                                       # noqa: BLE001
         say(f"sector indices unavailable ({type(exc).__name__})")
         return {}
 
-    def block(ticker, closes):
+    def block(ticker, closes, dates=None):
         label = SECTOR_INDICES.get(ticker) or BROAD_INDICES.get(ticker)
-        day = ((closes[-1] - closes[-2]) / closes[-2] * 100.0) if closes[-2] else None
-        month = ((closes[-1] - closes[0]) / closes[0] * 100.0) if closes[0] else None
+
+        gap_days = _gap_days(dates)
+        fresh = gap_days is None or gap_days <= MAX_SESSION_GAP_DAYS
+        day = (((closes[-1] - closes[-2]) / closes[-2] * 100.0)
+               if closes[-2] and fresh else None)
+
+        month_ago = closes[-min(len(closes), MONTH_SESSIONS)]
+        month = ((closes[-1] - month_ago) / month_ago * 100.0) if month_ago else None
+
         return label, {
             "index": ticker,
             "last": round(closes[-1], 2),
             "day_change_pct": round(day, 2) if day is not None else None,
             "month_return_pct": round(month, 2) if month is not None else None,
+            "stale_gap_days": None if fresh else gap_days,
             "broad": ticker in BROAD_INDICES,
         }
 
@@ -80,11 +127,11 @@ def fetch_indices(log=None) -> dict:
     missing = []
     for ticker in tickers:
         try:
-            closes = [c for c in frame[ticker]["Close"].tolist() if c == c]
+            closes, dates = _series(frame[ticker])
         except Exception:                                          # noqa: BLE001
-            closes = []
+            closes, dates = [], []
         if len(closes) >= 2:
-            label, data = block(ticker, closes)
+            label, data = block(ticker, closes, dates)
             out[label] = data
         else:
             missing.append(ticker)
@@ -94,12 +141,12 @@ def fetch_indices(log=None) -> dict:
     # retried on its own before we accept it as unavailable.
     for ticker in missing:
         try:
-            bars = yf.Ticker(ticker).history(period="1mo", interval="1d")
-            closes = [c for c in bars["Close"].tolist() if c == c]
+            bars = yf.Ticker(ticker).history(period=INDEX_PERIOD, interval="1d")
+            closes, dates = _series(bars)
         except Exception:                                          # noqa: BLE001
-            closes = []
+            closes, dates = [], []
         if len(closes) >= 2:
-            label, data = block(ticker, closes)
+            label, data = block(ticker, closes, dates)
             out[label] = data
 
     still_missing = [SECTOR_INDICES.get(t) or BROAD_INDICES.get(t)
@@ -107,6 +154,12 @@ def fetch_indices(log=None) -> dict:
     if still_missing:
         say(f"index data unavailable for {', '.join(still_missing)} — "
             f"those rows fall back to breadth alone")
+
+    gapped = {label: data["stale_gap_days"] for label, data in out.items()
+              if data.get("stale_gap_days")}
+    if gapped:
+        say("index series has holes, day change suppressed for: " + ", ".join(
+            f"{label} ({days}d since the prior bar)" for label, days in gapped.items()))
     return out
 
 

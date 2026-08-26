@@ -197,6 +197,7 @@ def _empty_evidence(symbol, name, ticker, bucket, sector):
         },
         "intraday": _empty_intraday("not built"),
         "market": market.describe(),
+        "regime": market.regime(),
         "relative": {
             "benchmark": BENCHMARK_NAME, "benchmark_day_change_pct": None,
             "benchmark_window_return_pct": None, "rel_day_change_pct": None,
@@ -266,6 +267,7 @@ def load_demo_bundles(demo_dir: str = DEMO_DIR) -> list:
         bundle.setdefault("intraday", _empty_intraday(
             "demo bundle — a frozen snapshot has no live session to read"))
         bundle.setdefault("market", market.describe())
+        bundle.setdefault("regime", market.regime())
         # a frozen bundle has no index alongside it and no forward calendar
         bundle.setdefault("relative", {
             "benchmark": BENCHMARK_NAME, "benchmark_day_change_pct": None,
@@ -538,6 +540,7 @@ def build_evidence_live(quote: dict, log=None) -> dict:
     # ---- market phase, technicals, intraday -------------------------------
     phase_info = market.describe(market_state=info.get("marketState"))
     ev["market"] = phase_info
+    ev["regime"] = market.regime(log=say)
     ev["technicals"].update(_technicals(closes, highs, lows, volumes, live,
                                         ev["price"], phase_info["session_fraction"]))
     ev["intraday"] = build_intraday(quote.get("intraday_frame"),

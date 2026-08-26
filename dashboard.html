@@ -391,6 +391,10 @@
       <span class="v" id="record">no settled signals yet</span>
     </div>
     <div class="stripitem">
+      <span class="k">Market regime</span>
+      <span class="v" id="regime">—</span>
+    </div>
+    <div class="stripitem">
       <span class="k">Sizing against</span>
       <span class="v" id="capitalshown">—</span>
     </div>
@@ -570,6 +574,16 @@
     var line = s.scoreboard_line || (CFG && CFG.scoreboard_line) || "";
     record.classList.toggle("none", !line);
     text(record, line || "no settled signals yet");
+
+    /* market regime — decides whether the panel's momentum logic applies */
+    var reg = (s.regime || (CFG && CFG.regime)) || {};
+    var rnode = el("regime");
+    rnode.classList.toggle("none", !reg.state || reg.state === "unknown");
+    text(rnode, reg.state === "risk_on"
+        ? "risk-on · NIFTY " + pct(reg.pct_vs_sma) + " vs 200dma"
+        : reg.state === "risk_off"
+          ? "RISK-OFF · NIFTY " + pct(reg.pct_vs_sma) + " vs 200dma · BUYs gated"
+          : "unknown");
 
     /* the amount this run sized against */
     var shown = el("capitalshown");

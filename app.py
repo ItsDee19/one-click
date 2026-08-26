@@ -202,6 +202,7 @@ def fresh_state():
         "calibration_line": "",
         "concentration": None,
         "portfolio": {},
+        "regime": market.regime(),
         "sector_heat": {},
         "orderbook": {},
         "capital": None,
@@ -1146,6 +1147,7 @@ def _public_track(track):
         "net": track.get("net"),
         "fired": bool(track.get("fired")),
         "gated": bool(track.get("gated")),
+        "regime_gated": bool(track.get("regime_gated")),
         "suppressed": track.get("suppressed"),
         "risk_reward": track.get("risk_reward") or {},
         "sizing": track.get("sizing") or {},
@@ -1220,6 +1222,7 @@ def config():
         "demo_bundles": len(data_sources.load_demo_bundles()),
         "db": os.path.basename(DB_PATH),
         "market": market.describe(),
+        "regime": market.regime(),
         "tracks": list(scoring.TRACKS),
         "scheduler": SCHEDULER.status() if SCHEDULER else {"enabled": False},
         "signal_cooldown_days": env_int("SIGNAL_COOLDOWN_DAYS", 5),
@@ -1367,6 +1370,7 @@ def status():
         snapshot = json.loads(json.dumps(STATE, default=str))
     snapshot["scheduler"] = SCHEDULER.status() if SCHEDULER else {"enabled": False}
     snapshot["market"] = market.describe()
+    snapshot["regime"] = market.regime()
     return jsonify(snapshot)
 
 

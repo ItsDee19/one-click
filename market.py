@@ -147,6 +147,76 @@ def describe(moment: datetime = None, market_state=None) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# market regime
+# ---------------------------------------------------------------------------
+#
+# The panel scores momentum: high RVOL, a strong 52-week position, price above
+# a rising average. Momentum pays in uptrends and inverts in downtrends — the
+# well-documented "momentum crash" — and the backtest found exactly that in
+# this universe:
+#
+#     NIFTY above its 200-day average   BUY +1.394% at 10 days, edge +0.81pp
+#     NIFTY below its 200-day average   BUY -1.485% at 10 days, edge -2.13pp
+#
+# So the state of the broad market is not decoration; it decides whether the
+# panel's own logic is currently worth anything. The 200-day average is the
+# most standard regime filter there is, deliberately, so this is a gate rather
+# than a parameter fitted to the sample that revealed the problem.
+
+REGIME_SMA = 200
+RISK_ON = "risk_on"
+RISK_OFF = "risk_off"
+REGIME_UNKNOWN = "unknown"
+
+_REGIME_CACHE = {"date": None, "value": None}
+
+
+def regime(benchmark="^NSEI", log=None, force=False) -> dict:
+    """
+    Is the broad market above or below its 200-day average?
+
+    Cached per calendar day: the answer cannot change intraday in any way that
+    matters, and every stock in a run would otherwise refetch it.
+    """
+    say = log or (lambda _m: None)
+    today = now_ist().date().isoformat()
+    if not force and _REGIME_CACHE["date"] == today and _REGIME_CACHE["value"]:
+        return _REGIME_CACHE["value"]
+
+    out = {"state": REGIME_UNKNOWN, "benchmark": benchmark, "sma_period": REGIME_SMA,
+           "last": None, "sma": None, "pct_vs_sma": None,
+           "note": "regime unavailable — the panel's momentum logic is unverified "
+                   "without it"}
+    try:
+        import yfinance as yf
+        bars = yf.Ticker(benchmark).history(period="2y", interval="1d")
+        closes = [c for c in bars["Close"].tolist() if c == c]
+    except Exception as exc:                                       # noqa: BLE001
+        say(f"regime check failed ({type(exc).__name__}) — treated as unknown")
+        closes = []
+
+    if len(closes) >= REGIME_SMA:
+        sma = sum(closes[-REGIME_SMA:]) / REGIME_SMA
+        last = closes[-1]
+        out.update({
+            "state": RISK_ON if last > sma else RISK_OFF,
+            "last": round(last, 2),
+            "sma": round(sma, 2),
+            "pct_vs_sma": round((last - sma) / sma * 100, 2),
+        })
+        out["note"] = (
+            f"NIFTY {out['pct_vs_sma']:+.2f}% versus its {REGIME_SMA}-day average — "
+            + ("momentum setups have historically paid in this state"
+               if out["state"] == RISK_ON else
+               "momentum setups have historically inverted in this state, so BUY "
+               "verdicts are held back"))
+        say(f"market regime: {out['state']} ({out['note']})")
+
+    _REGIME_CACHE.update({"date": today, "value": out})
+    return out
+
+
 def volume_divisor(fraction: float) -> float:
     """
     Scale factor for comparing a partial day's volume with a full-day average.
