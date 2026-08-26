@@ -405,6 +405,92 @@ correlated, not independent positions
 
 ---
 
+## Backtest: the panel is currently anti-predictive
+
+`backtest.py` replays the deterministic engine over historical daily bars,
+rebuilding each evidence bundle **point-in-time** — every slice ends at day
+`t`, so nothing is computed from a future bar.
+
+```bash
+python backtest.py --years 3 --step 2
+```
+
+### The result
+
+3 years, 32 tickers, 2,820 verdicts:
+
+```
+  verdict       n    +1d mean    +5d mean   +10d mean   +20d mean
+  BUY         562     -0.303%     -0.605%     -0.815%     -1.005%
+  WATCH      1020      0.122%      0.092%      -0.03%     -0.026%
+  AVOID      1238       0.11%       0.24%      0.222%      0.258%
+  NIFTY                 0.07%      0.063%     -0.035%     -0.139%
+```
+
+**BUY signals lose money and AVOID signals make it.** The t-statistic on the
+BUY forward return is −2.5 at ten days, so this is not noise, and the pattern
+is monotonic across net-score deciles:
+
+```
+    net  -49     0.647%
+    net  -13     0.635%
+    net   12     0.480%
+    net   22    -0.800%
+    net   34    -1.146%
+    net   53    -0.820%
+```
+
+It holds in both independent halves of the period (edge −0.91pp then
+−1.02pp), so it is not one bad regime.
+
+### Why
+
+Every factor the Bull rewards is inverted on this universe:
+
+| Factor | Best forward return | Worst |
+|---|---|---|
+| 52-week position | 0–20% (near lows): **+0.96%** | 80–95%: −0.50% |
+| RVOL | 0.8–1.2x: **+0.40%** | 3x+: −0.64% |
+| net score | negative: **+0.18%** | 40+: −1.11% |
+
+The Scout screens for the day's biggest movers; the Bull then rewards exactly
+what makes a mover extended — high 52-week position, high RVOL, a big day.
+In this sample that combination mean-reverts, so the panel systematically buys
+tops.
+
+### What this does and does not prove
+
+Tested: the technical core — RVOL, trend, SMA distance, 52-week position,
+relative strength, exhaustion.
+
+**Not** tested, because neither can be reconstructed point-in-time:
+
+- analyst targets, consensus and the buy/hold/sell split (yfinance serves only
+  today's values; using today's target on a two-year-old trade is exactly the
+  look-ahead this harness exists to avoid)
+- news sentiment (no historical archive)
+
+Both are null and declared in `data_gaps`, so the live engine — which does see
+them — is not identical to what was tested. But the technical core drives the
+screen and most of the score, so the finding is material.
+
+Also untested: the LLM judge (thousands of debate calls is neither affordable
+nor reproducible) and the intraday track (yfinance keeps only 60 days of
+5-minute bars).
+
+### The honest conclusion
+
+**Do not trade these signals.** Not "trade them carefully" — the BUY verdict is
+currently worse than its own AVOID verdict, with significance, across two
+independent periods.
+
+The obvious-looking fix — inverting the score — is exactly the mistake this
+harness exists to prevent. The inversion was *discovered* in this data, so
+adopting it would be fitting one sample. Any change has to be proposed first
+and validated on data it was not derived from.
+
+---
+
 ## Position sizing and risk
 
 Give the paper account a capital figure and it answers the only question that
@@ -596,6 +682,7 @@ file. `.env` is never read by the browser and never leaves the machine.
 
 ```
 app.py            server, agent state machine, Telegram, SQLite
+backtest.py       point-in-time historical replay of the scoring engine
 market.py         NSE trading phase + session-elapsed maths
 portfolio.py      position sizing, risk limits, paper account (no broker)
 research.py       public RSS with prompt-injection defences

@@ -9,3 +9,6 @@ __pycache__/
 # local run logs
 server.log
 server.err
+
+# backtest output
+backtest_results.json
