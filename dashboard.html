@@ -63,7 +63,12 @@
     padding:9px 32px 9px 12px;font:inherit;font-size:13.5px;color:var(--ink-2);
     cursor:pointer;
   }
-  select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  input[type=number]{
+    width:130px;border:1px solid var(--border-strong);border-radius:10px;
+    padding:9px 12px;font:inherit;font-size:13.5px;color:var(--ink-2);background:var(--card);
+  }
+  input[type=number]::placeholder{color:var(--faint);}
+  select:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
   button.primary{
     border:0;border-radius:10px;background:var(--accent);color:#fff;
     padding:10px 20px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;
@@ -315,6 +320,9 @@
     </div>
     <div class="controls">
       <span class="chip" id="phase"><span class="livedot"></span><span id="phasetext">…</span></span>
+      <input id="capital" type="number" min="0" step="1000" placeholder="Amount (₹)"
+             title="Amount you are deploying today. Leave blank to use the .env default."
+             aria-label="Capital for this run" />
       <select id="mode" aria-label="Data mode">
         <option value="demo">Demo · offline bundles</option>
         <option value="live">Live · NSE via yfinance</option>
@@ -355,6 +363,10 @@
     <div class="stripitem">
       <span class="k">Track record</span>
       <span class="v" id="record">no settled signals yet</span>
+    </div>
+    <div class="stripitem">
+      <span class="k">Sizing against</span>
+      <span class="v" id="capitalshown">—</span>
     </div>
     <div class="stripitem">
       <span class="k">Confidence</span>
@@ -502,6 +514,7 @@
     el("startspin").style.display = running ? "block" : "none";
     text(el("startlabel"), running ? "Agents working…" : "Start agents");
     el("mode").disabled = running;
+    el("capital").disabled = running;
 
     /* KPIs */
     var k = s.kpis || {};
@@ -519,6 +532,12 @@
     var line = s.scoreboard_line || (CFG && CFG.scoreboard_line) || "";
     record.classList.toggle("none", !line);
     text(record, line || "no settled signals yet");
+
+    /* the amount this run sized against */
+    var shown = el("capitalshown");
+    var amount = s.capital || (CFG && CFG.risk ? CFG.risk.capital : null);
+    shown.classList.toggle("none", !s.capital);
+    text(shown, amount ? money(amount) + (s.capital ? "" : " (default)") : "—");
 
     /* confidence calibration — does a 9/10 call beat a 7/10 one? */
     var calib = el("calib");
@@ -692,6 +711,12 @@
       '</div>' +
       '<div class="twhy">' + esc(track.why || "") + '</div>' +
       (levelBits.length ? '<div class="levels">' + esc(levelBits.join("  ·  ")) + '</div>' : '') +
+      (track.sizing && track.sizing.qty
+         ? '<div class="levels"><b>' + track.sizing.qty + ' sh ≈ ' + money(track.sizing.value) +
+           '</b> · risk ' + money(track.sizing.risk_rupees) +
+           ' (' + track.sizing.risk_pct_of_capital + '%)</div>'
+         : (track.sizing && track.sizing.reason
+             ? '<div class="levels">no size: ' + esc(track.sizing.reason) + '</div>' : '')) +
       (track.risk_reward && track.risk_reward.ratio
          ? '<div class="levels">reward/risk ' + track.risk_reward.ratio + ':1</div>' : '') +
       (track.gated ? '<span class="gate">held back by desk rules</span>' : '') +
@@ -708,7 +733,10 @@
     fetch("/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: el("mode").value })
+      body: JSON.stringify({
+        mode: el("mode").value,
+        capital: parseFloat(el("capital").value) || null
+      })
     }).then(function (r) { return r.json(); })
       .then(function (out) {
         if (!out.ok) { banner("err", out.error || "could not start the run"); el("start").disabled = false; }

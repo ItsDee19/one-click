@@ -95,10 +95,17 @@ BRAND = env_str("BRAND", "Dalal Desk")
 PORT = env_int("PORT", 5000)
 
 
-def risk_limits():
-    """The paper account's rules, rebuilt each run so .env edits take effect."""
+def risk_limits(capital=None):
+    """
+    The risk rules, rebuilt each run so .env edits take effect.
+
+    `capital` overrides the .env default for a single run. The percentages are
+    what stay fixed: 1% of Rs 20,000 and 1% of Rs 2,00,000 are different rupee
+    amounts but the same discipline, so a different sum each day changes the
+    sizes without changing the rules.
+    """
     return portfolio.RiskLimits(
-        capital=env_float("PAPER_CAPITAL", 100000),
+        capital=capital if capital else env_float("PAPER_CAPITAL", 100000),
         risk_per_trade_pct=env_float("RISK_PER_TRADE_PCT", 1.0),
         max_position_pct=env_float("MAX_POSITION_PCT", 20.0),
         max_concurrent=env_int("MAX_CONCURRENT_POSITIONS", 5),
@@ -193,6 +200,7 @@ def fresh_state():
         "calibration_line": "",
         "concentration": None,
         "portfolio": {},
+        "capital": None,
         "agents": fresh_agents(),
         "verdicts": [],
         "log": [],
@@ -463,6 +471,13 @@ def buy_message(row, track_name, track):
     levels = _levels_line(track)
     if levels:
         lines.append(esc(levels))
+
+    sizing = track.get("sizing") or {}
+    if sizing.get("qty"):
+        lines.append(
+            f"Size: {sizing['qty']} sh ≈ ₹{sizing['value']:,.0f} "
+            f"· risking ₹{sizing['risk_rupees']:,.0f} "
+            f"({sizing['risk_pct_of_capital']}% of capital)")
     lines += [horizon, "", f"<i>{esc(DISCLAIMER)}</i>"]
     return "\n".join(lines)
 
@@ -714,7 +729,7 @@ def _fired(rows, track=None):
     return out
 
 
-def run_cycle(mode):
+def run_cycle(mode, capital=None):
     threshold = env_int("CONFIDENCE_THRESHOLD", 7)
     shortlist_per_bucket = env_int("SHORTLIST_PER_BUCKET", 4)
     provider = llm.detect_provider()
@@ -736,9 +751,13 @@ def run_cycle(mode):
 
         log(f"run #{run_id} started · mode={mode} · engine={engine_label} "
             f"({provider.get('reason')}) · BUY threshold {threshold}/10")
+        if capital:
+            log(f"sizing this run against Rs {capital:,.0f} — "
+                f"Rs {capital * env_float('RISK_PER_TRADE_PCT', 1.0) / 100:,.0f} risked per trade, "
+                f"Rs {capital * env_float('MAX_DAILY_LOSS_PCT', 3.0) / 100:,.0f} daily stop")
 
         # settle yesterday's calls, and the paper book, before making today's
-        limits = risk_limits()
+        limits = risk_limits(capital)
         if mode == "demo" and env_str("PAPER_TRADING", "1") not in ("0", "false", "no"):
             log("paper trading idle in demo mode — demo prices are frozen, so a "
                 "simulated fill against them would measure nothing. Use live mode.")
@@ -937,6 +956,17 @@ def run_cycle(mode):
                 STATE["verdicts"].insert(0, _public_verdict(row))
             verdict_ids = db_save_verdict(run_id, row)
 
+            # What this signal means for today's amount. Computed for every
+            # fired signal regardless of mode, because "how much" is the
+            # question a verdict on its own never answers.
+            for name, track in row["tracks"].items():
+                if not track.get("fired"):
+                    continue
+                levels = track.get("levels") or {}
+                track["sizing"] = portfolio.size_position(
+                    limits, row.get("price"), levels.get("invalidation"),
+                    cash_available=limits.deployable)
+
             # A fired signal becomes a simulated position, subject to every
             # risk gate. No real order is placed — see portfolio.py.
             if paper_enabled(mode):
@@ -1094,6 +1124,7 @@ def _public_track(track):
         "gated": bool(track.get("gated")),
         "suppressed": track.get("suppressed"),
         "risk_reward": track.get("risk_reward") or {},
+        "sizing": track.get("sizing") or {},
     }
 
 
@@ -1175,7 +1206,7 @@ def config():
     })
 
 
-def begin_run(mode, trigger="manual"):
+def begin_run(mode, trigger="manual", capital=None):
     """
     Start a cycle. Shared by the button and the scheduler.
 
@@ -1194,8 +1225,9 @@ def begin_run(mode, trigger="manual"):
         STATE.update(fresh_state())
         STATE["mode"] = mode
         STATE["trigger"] = trigger
+        STATE["capital"] = capital
 
-    WORKER = threading.Thread(target=run_cycle, args=(mode,),
+    WORKER = threading.Thread(target=run_cycle, args=(mode, capital),
                               name="agent-cycle", daemon=True)
     WORKER.start()
     return True, "started"
@@ -1206,11 +1238,20 @@ def start():
     payload = request.get_json(silent=True) or {}
     mode = str(payload.get("mode") or "demo").strip().lower()
 
-    ok, message = begin_run(mode, trigger="manual")
+    capital = None
+    if payload.get("capital") not in (None, "", 0):
+        try:
+            capital = float(payload["capital"])
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "capital must be a number"}), 400
+        if capital <= 0:
+            return jsonify({"ok": False, "error": "capital must be positive"}), 400
+
+    ok, message = begin_run(mode, trigger="manual", capital=capital)
     if not ok:
         code = 400 if message.startswith("unknown mode") else 409
         return jsonify({"ok": False, "error": message}), code
-    return jsonify({"ok": True, "mode": mode})
+    return jsonify({"ok": True, "mode": mode, "capital": capital})
 
 
 @app.get("/scheduler")
