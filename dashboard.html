@@ -5,23 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Agent desk · Indian stock analysis</title>
 <style>
+  /* Token values are generated from DESIGN.md — see that file for rationale
+     and for the WCAG contrast audit every pair here is required to pass. */
   :root{
-    --bg:#f5f6f8;
-    --card:#ffffff;
-    --border:#e5e7ec;
-    --border-strong:#d6d9e0;
-    --ink:#111520;
-    --ink-2:#3d4451;
-    --muted:#6b7382;
-    --faint:#98a0ae;
-    --accent:#2f6bff;
-    --accent-soft:#eef3ff;
-    --green:#0f7a4d;
-    --green-soft:#e9f6ef;
-    --amber:#94620a;
-    --amber-soft:#fdf3e0;
-    --red:#b02a20;
-    --red-soft:#fdeeec;
+    --bg:#f5f6f8;              /* colors.surface */
+    --card:#ffffff;            /* colors.surface-container-lowest */
+    --card-low:#fcfcfd;        /* colors.surface-container-low — nested panels */
+    --card-high:#fafbfc;       /* colors.surface-container — table headers */
+    --border:#e5e7ec;          /* colors.outline-variant */
+    --border-strong:#d6d9e0;   /* colors.outline */
+    --ink:#111520;             /* colors.on-surface — 18.23:1 on card */
+    --ink-2:#3d4451;           /* colors.on-surface-variant — 9.79:1 on card */
+    --muted:#5d6573;           /* colors.on-surface-muted — 5.88:1 on card */
+    --faint:#646c7b;           /* colors.on-surface-faint — 5.29:1 on card, labels only */
+    --accent:#2b62ee;          /* colors.primary — 5.14:1 on card */
+    --accent-soft:#eef3ff;     /* colors.primary-container */
+    --green:#0f7a4d;           /* colors.buy */
+    --green-soft:#e9f6ef;      /* colors.buy-container */
+    --amber:#94620a;           /* colors.watch */
+    --amber-soft:#fdf3e0;      /* colors.watch-container */
+    --red:#b02a20;             /* colors.avoid */
+    --red-soft:#fdeeec;        /* colors.avoid-container */
+    --unavailable-soft:#f0f1f4;/* colors.unavailable-container */
     --radius:14px;
     --shadow:0 1px 2px rgba(17,21,32,.05), 0 10px 28px -22px rgba(17,21,32,.45);
   }
@@ -96,7 +101,7 @@
     font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
     color:var(--faint);font-weight:600;
   }
-  .kpi .value{font-size:28px;font-weight:660;letter-spacing:-.02em;margin-top:6px;line-height:1.15;}
+  .kpi .value{font-size:28px;font-weight:660;letter-spacing:-.02em;margin-top:6px;line-height:1.15;font-variant-numeric:tabular-nums;}
   .kpi .value small{font-size:14px;font-weight:550;color:var(--muted);margin-left:4px;letter-spacing:0;}
   .kpi .sub{font-size:12px;color:var(--muted);margin-top:3px;}
 
@@ -171,6 +176,7 @@
   .stat .v{
     font-size:17px;font-weight:640;letter-spacing:-.01em;margin-top:2px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    font-variant-numeric:tabular-nums;
   }
   .stat .v.small{font-size:12.5px;font-weight:600;color:var(--ink-2);padding-top:4px;}
 
@@ -190,7 +196,7 @@
 
   .tracks{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .track{
-    border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fcfcfd;
+    border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--card-low);
   }
   .track.BUY{border-color:#c6e6d5;background:#f7fcf9;}
   .track.AVOID{border-color:#f2d5d1;background:#fefaf9;}
@@ -221,7 +227,7 @@
   .badge.BUY{background:var(--green-soft);color:var(--green);}
   .badge.WATCH{background:var(--amber-soft);color:var(--amber);}
   .badge.AVOID{background:var(--red-soft);color:var(--red);}
-  .badge.UNAVAILABLE{background:#f0f1f4;color:var(--faint);width:96px;}
+  .badge.UNAVAILABLE{background:var(--unavailable-soft);color:var(--faint);width:96px;}
   .chip{
     display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
     font-size:11.5px;font-weight:600;background:#eef1f6;color:var(--ink-2);
@@ -239,7 +245,7 @@
   }
   .subtle{font-size:12px;color:var(--muted);margin-top:2px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .conf{font-size:14px;font-weight:640;}
+  .conf{font-size:14px;font-weight:640;font-variant-numeric:tabular-nums;}
   .conf small{color:var(--faint);font-weight:500;}
   .meter{height:4px;border-radius:2px;background:#eceef2;margin-top:5px;overflow:hidden;width:62px;}
   .meter i{display:block;height:100%;border-radius:2px;background:var(--accent);transition:width .5s ease;}
@@ -250,8 +256,8 @@
   .why .cat{display:block;font-size:11.5px;color:var(--faint);margin-top:3px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .px{text-align:right;}
-  .px .p{font-size:14px;font-weight:640;letter-spacing:-.01em;}
-  .px .c{font-size:12px;font-weight:600;margin-top:2px;}
+  .px .p{font-size:14px;font-weight:640;letter-spacing:-.01em;font-variant-numeric:tabular-nums;}
+  .px .c{font-size:12px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;}
   .up{color:var(--green);} .down{color:var(--red);} .flat{color:var(--muted);}
   .empty{padding:44px 20px;text-align:center;color:var(--muted);font-size:13.5px;}
 
@@ -262,7 +268,7 @@
   }
   .trow:first-child{border-top:0;}
   .trow.head{
-    background:#fafbfc;border-top:0;padding:9px 18px;font-size:10.5px;
+    background:var(--card-high);border-top:0;padding:9px 18px;font-size:10.5px;
     letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600;
   }
   .sectrow{grid-template-columns:minmax(120px,1.4fr) 92px 92px 110px minmax(140px,1fr) 96px;}
@@ -274,7 +280,7 @@
   .pill.leading{background:var(--green-soft);color:var(--green);}
   .pill.lagging{background:var(--red-soft);color:var(--red);}
   .pill.mixed{background:var(--amber-soft);color:var(--amber);}
-  .pill.neutral{background:#f0f1f4;color:var(--faint);}
+  .pill.neutral{background:var(--unavailable-soft);color:var(--faint);}
   .num{font-variant-numeric:tabular-nums;}
   @media (max-width:1000px){
     .sectrow,.obrow{grid-template-columns:1fr 1fr;}
