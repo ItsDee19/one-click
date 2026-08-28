@@ -2,44 +2,46 @@
 version: alpha
 name: Dalal Desk
 description: >
-  A calm, dense research terminal for Indian equities. Optimised for reading
-  numbers under time pressure and for being trusted when it says it does not
-  know something.
+  A dark, precise research terminal for Indian equities. Optimised for reading
+  numbers under time pressure, for long sessions, and for being trusted when it
+  says it does not know something.
 colors:
-  # --- surfaces, lowest to highest --------------------------------------
-  surface: "#f5f6f8"
-  surface-container-lowest: "#ffffff"
-  surface-container-low: "#fcfcfd"
-  surface-container: "#fafbfc"
-  surface-container-high: "#f1f3f7"
-  surface-container-highest: "#eceef2"
+  # Dark is the default theme. A light set ships alongside and is one click
+  # away; both are audited to the same 4.5:1 requirement.
+  # --- surfaces, deepest to highest --------------------------------------
+  surface: "#080b12"
+  surface-container-lowest: "#0b0f16"
+  surface-container-low: "#0b0f16"
+  surface-container: "#0e1219"
+  surface-container-high: "#141924"
+  surface-container-highest: "#1b2130"
   # --- content on surfaces ------------------------------------------------
-  on-surface: "#111520"
-  on-surface-variant: "#3d4451"
-  on-surface-muted: "#5d6573"
-  on-surface-faint: "#646c7b"
-  outline: "#d6d9e0"
-  outline-variant: "#e5e7ec"
+  on-surface: "#e9eef8"
+  on-surface-variant: "#aab6cc"
+  on-surface-muted: "#8896ae"
+  on-surface-faint: "#78859c"
+  outline: "#28303f"
+  outline-variant: "#1b2130"
   # --- action -------------------------------------------------------------
-  primary: "#2b62ee"
-  on-primary: "#ffffff"
-  primary-container: "#eef3ff"
-  on-primary-container: "#1c3f9e"
+  primary: "#4cc9f0"
+  on-primary: "#03121a"
+  primary-container: "#0c2230"
+  on-primary-container: "#4cc9f0"
   # --- verdict semantics --------------------------------------------------
-  buy: "#0f7a4d"
-  on-buy: "#ffffff"
-  buy-container: "#e9f6ef"
-  on-buy-container: "#0b5c3a"
-  watch: "#94620a"
-  on-watch: "#ffffff"
-  watch-container: "#fdf3e0"
-  on-watch-container: "#7a5108"
-  avoid: "#b02a20"
-  on-avoid: "#ffffff"
-  avoid-container: "#fdeeec"
-  on-avoid-container: "#8f231b"
-  unavailable: "#646c7b"
-  unavailable-container: "#f0f1f4"
+  buy: "#3ddc97"
+  on-buy: "#03121a"
+  buy-container: "#0d2a1f"
+  on-buy-container: "#3ddc97"
+  watch: "#f5b544"
+  on-watch: "#1a1204"
+  watch-container: "#2b2110"
+  on-watch-container: "#f5b544"
+  avoid: "#ff6b6b"
+  on-avoid: "#1a0709"
+  avoid-container: "#2c1417"
+  on-avoid-container: "#ff6b6b"
+  unavailable: "#78859c"
+  unavailable-container: "#161b24"
 typography:
   headline-md:
     fontFamily: Inter
@@ -130,10 +132,16 @@ This is a research terminal, not a trading app. Its job is to present evidence
 and a verdict, make the reasoning inspectable, and be unambiguous about what it
 does not know. Every visual decision follows from that.
 
-The register is a quiet institutional desk: white cards on a soft grey field,
-hairline borders, generous internal spacing, almost no colour except where
-colour carries meaning. Nothing pulses, glows or animates unless it is
-reporting live state.
+The register is a dark instrument panel: deep near-black surfaces, hairline
+borders, a faint engineering grid, and a single cyan accent. Colour is almost
+absent except where it carries meaning. Nothing pulses, glows or animates
+unless it is reporting live state.
+
+Dark is the default because this is read for hours, often before sunrise, and
+because a dark ground gives *more* contrast headroom than a light one — every
+token here clears 4.5:1 with room to spare, where the light palette had to be
+tuned to reach it. The light theme ships alongside, one click away, and the
+choice is remembered.
 
 The emotional target is **calm competence under time pressure**. A user opens
 this at 09:00 with fifteen minutes before the bell. They need to find the
@@ -143,10 +151,11 @@ feeling for an interface that is often telling you to do nothing.
 Two consequences worth stating up front, because they rule out most of what is
 fashionable in dashboard design:
 
-- **Legibility outranks atmosphere.** Glass, blur, translucency and gradient
-  fills all reduce the contrast of text sitting on them. On a screen whose
-  entire purpose is small numbers — ₹1,403.00, 2.6x, −1.87% — that trade is
-  never worth making.
+- **Legibility outranks atmosphere.** Glass, blur and translucency all reduce
+  the contrast of text sitting on them. On a screen whose entire purpose is
+  small numbers — ₹1,403.00, 2.6x, −1.87% — that trade is never worth making.
+  Gradients appear in exactly three places (the logo mark, the primary button,
+  and one fixed wash behind the header) and never behind text.
 - **Density outranks drama.** Oversized display type is a poster technique. A
   verdict row here carries two verdicts, two confidences, six price levels and
   a rationale. Space spent on a 84px headline is space taken from evidence.
@@ -178,6 +187,10 @@ levels. Numbers a user might act on were the least legible text on the page.
 
 One family, Inter, with a system fallback stack. Size and weight carry the
 hierarchy; there are no decorative faces.
+
+Labels are small, uppercase and widely tracked (0.09-0.13em). At 9.5-10.5px
+that tracking is what keeps them legible rather than decorative, and it is what
+makes the interface read as an instrument rather than a web page.
 
 The important rule is **tabular numerals**. Every metric, price and percentage
 uses `font-feature-settings: 'tnum' 1`, so that digits occupy identical width.
@@ -241,6 +254,37 @@ stopped it" is one of the most important things the app can tell you.
 when done. The pulse is the only ambient animation in the product and it is
 reporting real state.
 
+## Motion
+
+Motion answers three questions and nothing else: *what changed*, *what is
+working*, and *what just arrived*.
+
+| Animation | What it reports |
+|---|---|
+| staggered rise on load | page structure, one pass, never on re-render |
+| hairline draw across KPI cards | the board has initialised |
+| **scan line** across an agent card | that agent is working right now |
+| pulsing status dot | live state: working (accent) or done (green) |
+| equaliser bars | the working agent is active, not hung |
+| **flash on a value** | that number just changed |
+| slide-in on a verdict row | a new verdict arrived |
+| sweep across the Start button | a run is in flight and the button is locked |
+| sheen on the logo mark | idle brand detail, 6s cycle, the one exception |
+| spinner | a request is pending |
+
+Two rules govern all of it:
+
+- **A flash only fires on a genuine change.** The first render seeds the value
+  silently. Flashing on every poll would train the eye to ignore the flash,
+  which destroys the only thing it is for.
+- **`prefers-reduced-motion` disables everything.** All of it is polish over a
+  fully legible static page, so honouring the OS setting costs nothing.
+
+Theme switching is deliberately *not* animated. Beyond reading as lag, a
+transition on a property fed by a custom property that just changed leaves the
+computed value stuck at the old one — the page stayed dark while every other
+token flipped to light.
+
 ## Do's and Don'ts
 
 **Do** use `—` for a value that does not exist, and put the reason nearby. A
@@ -262,7 +306,9 @@ on the one thing this interface exists to show.
 palette mean less.
 
 **Don't** animate anything that is not reporting live state. Decorative motion
-in a financial interface reads as the data moving.
+in a financial interface reads as the data moving. Every animation in the
+product is listed under Motion; if a new one does not fit that list, it does
+not belong.
 
 **Don't** use `on-surface-faint` for numbers a user might act on. It is for
 labels. Levels, prices and percentages belong in `on-surface-variant` or
