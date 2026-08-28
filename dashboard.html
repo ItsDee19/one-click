@@ -521,19 +521,130 @@
   }
   footer .right{color:var(--faint);}
 
-  @media (max-width:1000px){
-    .kpis{grid-template-columns:repeat(2,1fr);}
-    .agents{grid-template-columns:repeat(2,1fr);}
-    .tracks{grid-template-columns:1fr;}
-    .sectrow,.obrow{grid-template-columns:1fr 1fr;}
-    .trow.head{display:none;}
+  /* ======================================================================
+     Responsive
+     ----------------------------------------------------------------------
+     Five bands. The grids are auto-fit rather than fixed counts wherever the
+     content allows, so the layout also survives the widths between the
+     breakpoints instead of only at them.
+     ====================================================================== */
+
+  /* Nothing may push the page sideways. Long unbroken strings — a CLI path in
+     the engine line, a URL in a headline — were the main offenders. */
+  html,body{max-width:100%;overflow-x:hidden;}
+  .brandtext p,.why,.twhy,.subtle.wrap,.logbox{overflow-wrap:anywhere;}
+
+  /* .subtle is nowrap+ellipsis by default, which silently truncates a long
+     cell instead of wrapping it. `.wrap` opts a cell out — the order-book
+     reading is a full sentence and must not lose its tail. */
+  .subtle.wrap{white-space:normal;overflow:visible;text-overflow:clip;}
+
+  /* A grid or flex item defaults to min-width:auto, which refuses to shrink
+     below its content. One long sentence in a table cell then blows the whole
+     track out past the viewport. Every text-bearing child needs min-width:0. */
+  .trow > *,.tracks > *,.rowtop > *,.stats > *,.kpis > *,.agents > *,
+  .strip > *,.controls > *{min-width:0;}
+
+  /* Explicit counts, not auto-fit. There are exactly 4 KPIs and 8 agents, and
+     both divide evenly into 4 or 2 — auto-fit picked 5 agent columns at wide
+     viewports, which left three orphans on the second row. */
+  .kpis{grid-template-columns:repeat(4,minmax(0,1fr));}
+  .agents{grid-template-columns:repeat(4,minmax(0,1fr));}
+
+  /* --- very large: give the density somewhere to go -------------------- */
+  @media (min-width:1600px){
+    .wrap{max-width:1440px;}
+    .kpi .value{font-size:32px;}
+    .tracks{gap:13px;}
   }
-  @media (max-width:620px){
-    .wrap{padding:20px 15px 48px;}
+
+  /* --- laptop: four agent cards get cramped below this --------------- */
+  @media (max-width:1180px){
+    .agents{grid-template-columns:repeat(3,minmax(0,1fr));}
+  }
+
+  /* --- tablet ---------------------------------------------------------- */
+  @media (max-width:1000px){
+    .kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .agents{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .tracks{grid-template-columns:1fr;}
+    .sectrow{grid-template-columns:minmax(0,1.4fr) 1fr 1fr 1fr;}
+    .obrow{grid-template-columns:minmax(0,1.3fr) 1fr 1fr;}
+    /* the columns the narrower grid can no longer carry */
+    .sectrow > :nth-child(5),.sectrow > :nth-child(6){grid-column:1/-1;}
+    .obrow  > :nth-child(5){grid-column:1/-1;}
+    .trow.head{display:none;}
+    .trow .cell[data-label]::before{
+      content:attr(data-label);display:block;
+      font-size:9px;letter-spacing:.09em;text-transform:uppercase;
+      color:var(--faint);font-weight:700;margin-bottom:2px;
+    }
+  }
+
+  /* --- small tablet / large phone -------------------------------------- */
+  @media (max-width:760px){
+    .wrap{padding:22px 16px 56px;}
+    header{align-items:flex-start;gap:14px;}
+    .brandtext h1{white-space:normal;font-size:16.5px;line-height:1.3;}
+    .brandtext p{white-space:normal;font-size:11.5px;}
+    .controls{width:100%;display:grid;grid-template-columns:1fr auto auto;gap:8px;}
+    #phase{grid-column:1/-1;justify-content:center;}
+    input[type=number]{width:100%;}
+    button.primary{grid-column:1/-1;justify-content:center;}
+
+    /* Rows become stacked cards. Every value keeps its label, because the
+       header row is gone and a bare "+0.47%" says nothing. */
+    .sectrow,.obrow{grid-template-columns:1fr 1fr;gap:10px 14px;}
+    /* stacked: there is width to wrap into, and truncation loses data */
+    .trow .cell.subtle{white-space:normal;overflow:visible;text-overflow:clip;}
+    .sectrow > .lead,.obrow > .lead,
+    .sectrow > :nth-child(5),.sectrow > :nth-child(6),
+    .obrow > :nth-child(5){grid-column:1/-1;}
+    .strip{padding:2px 4px;}
+    .stripitem{width:100%;padding:8px 11px;}
+  }
+
+  /* --- phone ----------------------------------------------------------- */
+  @media (max-width:560px){
+    .wrap{padding:18px 13px 44px;}
     .kpis,.agents{grid-template-columns:1fr;}
-    header{align-items:flex-start;}
-    .controls{width:100%;}
-    button.primary{flex:1;justify-content:center;}
+    .kpi{padding:13px 15px;}
+    .kpi .value{font-size:26px;}
+    .agent .role{min-height:0;}
+    .row{padding:13px 14px;}
+    /* price moves under the symbol rather than fighting it for the line */
+    .rowtop{flex-wrap:wrap;gap:4px 10px;}
+    .rowtop .px{margin-left:0;width:100%;text-align:left;justify-content:flex-start;}
+    .track .horizon{max-width:100%;}
+    .sechead{flex-direction:column;align-items:flex-start;gap:3px;}
+    .sechead h2::after{display:none;}
+    footer{flex-direction:column;gap:8px;}
+  }
+
+  /* --- small phone ----------------------------------------------------- */
+  @media (max-width:400px){
+    .wrap{padding:16px 11px 40px;}
+    .brandtext h1{font-size:15.5px;}
+    .mark{width:34px;height:34px;}
+    .kpi .value{font-size:24px;}
+    .controls{grid-template-columns:1fr auto;}
+    .sectrow,.obrow{grid-template-columns:1fr;}
+    .track{padding:10px 11px;}
+    .stats{gap:8px;}
+  }
+
+  /* --- touch: the guideline minimum is 44px, several controls were 35 --- */
+  @media (pointer:coarse){
+    button.primary,button.ghost,select,input[type=number]{min-height:44px;}
+    button.ghost{width:44px;}
+    details.log summary{padding:11px 2px;}
+    .stripitem{padding:11px 12px;}
+  }
+
+  /* --- short viewports: a phone in landscape --------------------------- */
+  @media (max-height:520px) and (orientation:landscape){
+    .logbox{max-height:150px;}
+    .agent .role{min-height:0;}
   }
 </style>
 <script>
@@ -1052,15 +1163,18 @@
                '<div>Median</div><div>Breadth</div><div>Best / worst</div><div></div></div>';
     rows.forEach(function (r) {
       html += '<div class="trow sectrow">' +
-        '<div><b>' + esc(r.sector) + '</b>' +
+        '<div class="cell lead"><b>' + esc(r.sector) + '</b>' +
           (r.index ? '<div class="subtle">' + esc(r.index) + ' index</div>' : '') + '</div>' +
-        '<div class="num ' + dirClass(r.index_change_pct) + '">' + pct(r.index_change_pct) + '</div>' +
-        '<div class="num ' + dirClass(r.median_move_pct) + '">' + pct(r.median_move_pct) + '</div>' +
-        '<div class="num">' + (r.advancing) + '/' + (r.advancing + r.declining) + ' up' +
+        '<div class="cell num ' + dirClass(r.index_change_pct) + '" data-label="Index">' +
+          pct(r.index_change_pct) + '</div>' +
+        '<div class="cell num ' + dirClass(r.median_move_pct) + '" data-label="Median">' +
+          pct(r.median_move_pct) + '</div>' +
+        '<div class="cell num" data-label="Breadth">' + (r.advancing) + '/' +
+          (r.advancing + r.declining) + ' up' +
           (r.advance_pct !== null ? ' <span class="subtle">(' + r.advance_pct + '%)</span>' : '') + '</div>' +
-        '<div class="subtle">' + esc(r.best.symbol) + ' ' + pct(r.best.change) +
-          ' · ' + esc(r.worst.symbol) + ' ' + pct(r.worst.change) + '</div>' +
-        '<div><span class="pill ' + esc(r.state) + '">' + esc(r.state) + '</span></div>' +
+        '<div class="cell subtle" data-label="Best / worst">' + esc(r.best.symbol) + ' ' +
+          pct(r.best.change) + ' · ' + esc(r.worst.symbol) + ' ' + pct(r.worst.change) + '</div>' +
+        '<div class="cell"><span class="pill ' + esc(r.state) + '">' + esc(r.state) + '</span></div>' +
         '</div>';
     });
     feed.innerHTML = html;
@@ -1096,13 +1210,16 @@
                '<div>Order book</div><div>Q sales</div><div>Reading</div></div>';
     rows.forEach(function (r) {
       html += '<div class="trow obrow">' +
-        '<div><b>' + esc(r.symbol) + '</b><div class="subtle">' + esc(r.sector || "") + '</div></div>' +
-        '<div class="num"><b>' + r.book_to_sales + 'x</b>' +
+        '<div class="cell lead"><b>' + esc(r.symbol) + '</b><div class="subtle">' +
+          esc(r.sector || "") + '</div></div>' +
+        '<div class="cell num" data-label="Book / sales"><b>' + r.book_to_sales + 'x</b>' +
           (r.stale ? '<div class="subtle">stale</div>' : '') + '</div>' +
-        '<div class="num">₹' + Number(r.order_book_cr).toLocaleString("en-IN") + ' Cr' +
+        '<div class="cell num" data-label="Order book">₹' +
+          Number(r.order_book_cr).toLocaleString("en-IN") + ' Cr' +
           (r.order_book_as_of ? '<div class="subtle">' + esc(r.order_book_as_of) + '</div>' : '') + '</div>' +
-        '<div class="num">₹' + Number(r.quarterly_revenue_cr).toLocaleString("en-IN") + ' Cr</div>' +
-        '<div class="subtle" style="white-space:normal">' + esc(r.reason) + '</div>' +
+        '<div class="cell num" data-label="Q sales">₹' +
+          Number(r.quarterly_revenue_cr).toLocaleString("en-IN") + ' Cr</div>' +
+        '<div class="cell subtle wrap" data-label="Reading">' + esc(r.reason) + '</div>' +
         '</div>';
     });
     feed.innerHTML = html;
