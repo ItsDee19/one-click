@@ -1,0 +1,50 @@
+# Fly.io backend. The frontend is static and goes to Vercel — see DEPLOY.md.
+#
+#   fly launch --no-deploy
+#   fly volumes create data --size 1 --region bom
+#   fly secrets set ANTHROPIC_API_KEY=... TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=...
+#   fly deploy
+
+app = "dalal-desk"
+primary_region = "bom"          # Mumbai: closest to the exchange feed
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  HOST = "0.0.0.0"
+  PORT = "8080"
+  DB_DIR = "/data"
+  TZ = "Asia/Kolkata"
+  SCHEDULE_ENABLED = "1"
+  SCHEDULE_TIMES = "09:00,09:45"
+  SCHEDULE_INTERVAL_MINUTES = "30"
+  SCHEDULE_FOLLOW_SESSION = "1"
+  # ALLOWED_ORIGINS must list your Vercel URL exactly, or the browser blocks
+  # every request. Set it with `fly secrets set` or add it here.
+
+[mounts]
+  source = "data"
+  destination = "/data"         # signals.db lives here and survives deploys
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # The scheduler is a thread inside this process. If the machine is stopped
+  # when idle it will not be alive at 09:00 to fire the pre-open run, so
+  # auto-stop is off and one machine is always running.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "60s"
+    method = "GET"
+    path = "/health"
+    timeout = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"              # pandas + yfinance need real headroom

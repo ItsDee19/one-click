@@ -252,9 +252,24 @@ The app runs itself at the two moments in an NSE day when the answer changes:
 |---|---|
 | **09:00** | pre-open — the positional shortlist is fully computable before the bell; intraday is a watchlist with levels |
 | **09:45** | confirmation — the opening range has printed and RVOL has a real sample, so intraday verdicts become live |
+| **every 30 min** | session sweeps until ~15:10 — prices move, RVOL firms up, and a verdict from 10:00 is a statement about 10:00 |
 
-Weekdays only. Holidays are not guessed from a hardcoded calendar: the run
-starts, the feed reports the market closed, and the intraday track says so.
+A full trading day therefore runs:
+
+```
+09:00  09:45  10:15  10:45  11:15  11:45  12:15  12:45  13:15  13:45  14:15  14:45
+```
+
+Sweeps stop 20 minutes before the close, because a cycle takes 8-15 minutes
+and one started at 15:20 would publish intraday verdicts after the bell.
+A sweep never starts on top of a cycle that is still running.
+
+**Trading holidays are not guessed from a hardcoded list.** Those dates move —
+several follow the lunar calendar — and a stale list fails silently. The
+exchange is asked instead, via two independent signals: the feed's own
+`marketState` (which reports CLOSED on a holiday even before the open) and
+whether the benchmark has printed a bar dated today. On a holiday the desk
+logs `standing down today` and makes no further calls.
 
 ```bash
 SCHEDULE_ENABLED=1

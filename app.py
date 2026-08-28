@@ -36,7 +36,13 @@ import scoring
 import sectors
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "signals.db")
+
+# signals.db carries the whole track record — settled outcomes, confidence
+# calibration, the paper account. Containers have ephemeral filesystems, so
+# DB_DIR points it at a mounted volume; without that every deploy silently
+# resets the history the memory system is built on.
+DB_DIR = os.environ.get("DB_DIR", "").strip() or HERE
+DB_PATH = os.path.join(DB_DIR, "signals.db")
 DASHBOARD = os.path.join(HERE, "dashboard.html")
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -278,6 +284,7 @@ def db():
 
 
 def init_db():
+    os.makedirs(DB_DIR, exist_ok=True)
     with db() as conn:
         conn.executescript(
             """
@@ -1181,10 +1188,38 @@ def _public_verdict(row):
 app = Flask(__name__)
 
 
+def allowed_origins():
+    """
+    Origins permitted to call this API.
+
+    Empty by default: served same-origin, the dashboard needs no CORS at all.
+    Set ALLOWED_ORIGINS only when the frontend is hosted separately (Vercel),
+    and list the exact origins — "*" would let any page on the internet read
+    your positions and track record.
+    """
+    raw = env_str("ALLOWED_ORIGINS")
+    return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+
+
 @app.after_request
-def _no_cache(response):
+def _headers(response):
     response.headers["Cache-Control"] = "no-store"
+
+    origin = (request.headers.get("Origin") or "").rstrip("/")
+    permitted = allowed_origins()
+    if origin and (origin in permitted or "*" in permitted):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Max-Age"] = "600"
     return response
+
+
+@app.route("/<path:_any>", methods=["OPTIONS"])
+@app.route("/", methods=["OPTIONS"])
+def _preflight(_any=None):
+    return ("", 204)
 
 
 @app.get("/")
@@ -1279,6 +1314,25 @@ def start():
         code = 400 if message.startswith("unknown mode") else 409
         return jsonify({"ok": False, "error": message}), code
     return jsonify({"ok": True, "mode": mode, "capital": capital})
+
+
+@app.get("/health")
+def health():
+    """Liveness plus enough state to tell whether the desk is actually working."""
+    with LOCK:
+        status = STATE.get("status")
+        run_id = STATE.get("run_id")
+    day = market.is_trading_day()
+    return jsonify({
+        "ok": True,
+        "status": status,
+        "run_id": run_id,
+        "market": market.describe(),
+        "trading_day": day,
+        "scheduler": SCHEDULER.status() if SCHEDULER else {"enabled": False},
+        "engine": llm.detect_provider().get("label"),
+        "version": "1.0",
+    })
 
 
 @app.get("/scheduler")
@@ -1399,6 +1453,11 @@ def main():
         mode=env_str("SCHEDULE_MODE", "live"),
         log=log,
         enabled=env_str("SCHEDULE_ENABLED", "1") not in ("0", "false", "no"),
+        interval_minutes=env_int("SCHEDULE_INTERVAL_MINUTES",
+                                 scheduler_mod.DEFAULT_INTERVAL_MINUTES),
+        follow_session=env_str("SCHEDULE_FOLLOW_SESSION", "1") not in ("0", "false", "no"),
+        # never start a sweep on top of a cycle that is still running
+        is_busy=lambda: STATE.get("status") == "running",
     )
 
     provider = llm.detect_provider()
@@ -1410,9 +1469,14 @@ def main():
     print(f"  engine    : {provider['label']}  ({provider['reason']})")
     print(f"  telegram  : {'configured' if telegram_configured() else 'NOT configured — see .env.example'}")
     print(f"  audit db  : {DB_PATH}")
-    print(f"  schedule  : "
-          f"{SCHEDULER.pretty_times()} IST ({SCHEDULER.mode} mode)"
-          if SCHEDULER.enabled else "  schedule  : disabled")
+    if SCHEDULER.enabled:
+        plan = f"{SCHEDULER.pretty_times()} IST"
+        if SCHEDULER.interval_minutes:
+            plan += f", then every {SCHEDULER.interval_minutes} min while open"
+        print(f"  schedule  : {plan} ({SCHEDULER.mode} mode, trading days only)")
+        print(f"  next run  : {SCHEDULER.next_run_str()}")
+    else:
+        print("  schedule  : disabled")
     print(f"  dashboard : {url}")
     print("  analysis only — this app never places an order")
     print("=" * 68, flush=True)
@@ -1425,7 +1489,8 @@ def main():
         STATE.setdefault("log", [])
     SCHEDULER.start()
 
-    app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
+    # 127.0.0.1 locally; a container needs 0.0.0.0 to be reachable at all
+    app.run(host=env_str("HOST", "127.0.0.1"), port=PORT, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

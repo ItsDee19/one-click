@@ -148,6 +148,90 @@ def describe(moment: datetime = None, market_state=None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# is the market open at all today?
+# ---------------------------------------------------------------------------
+#
+# The clock can rule out weekends but knows nothing about the roughly fifteen
+# trading holidays the NSE observes each year, and those dates move — several
+# follow the lunar calendar. A hardcoded list would be wrong within a year and
+# silently so, which is the worst kind of wrong for something that decides
+# whether to spend an hour of compute.
+#
+# So the exchange is asked instead, via two independent signals:
+#
+#   marketState  — the feed's own view. Reports CLOSED on a holiday even
+#                  before the open, which is the case the clock cannot cover.
+#   today's bar  — if the benchmark has printed a bar dated today, the market
+#                  is definitively open. Only usable after trading starts.
+#
+# Neither alone is sufficient; together they cover the whole day.
+
+_TRADING_DAY_CACHE = {"date": None, "value": None}
+
+
+def is_trading_day(benchmark="^NSEI", log=None, force=False, moment=None) -> dict:
+    """
+    Is the NSE actually open today? Cached per calendar day.
+
+    Returns {"trading": bool|None, "reason": str, "source": str}. `trading`
+    is None when neither signal could be read — the caller should treat that
+    as "probably open, but say so", never as a silent skip.
+
+    `moment` overrides the reference time. Callers already hold the instant
+    they are reasoning about, and taking it as an argument keeps this
+    testable instead of silently reading a different clock than the caller.
+    """
+    say = log or (lambda _m: None)
+    moment = moment or now_ist()
+    today = moment.date().isoformat()
+
+    if not force and _TRADING_DAY_CACHE["date"] == today and _TRADING_DAY_CACHE["value"]:
+        return _TRADING_DAY_CACHE["value"]
+
+    if is_weekend(moment):
+        out = {"trading": False, "reason": f"{moment.strftime('%A')} — weekend",
+               "source": "clock"}
+        _TRADING_DAY_CACHE.update({"date": today, "value": out})
+        return out
+
+    out = {"trading": None,
+           "reason": "could not reach the exchange feed to confirm the session",
+           "source": "unavailable"}
+    try:
+        import yfinance as yf
+        handle = yf.Ticker(benchmark)
+
+        state = str((handle.info or {}).get("marketState") or "").strip().upper()
+        if state in ("REGULAR", "PRE", "PREPRE"):
+            out = {"trading": True, "reason": f"exchange reports {state}",
+                   "source": "marketState"}
+        elif state in ("POST", "POSTPOST"):
+            out = {"trading": True, "reason": "session has closed for the day",
+                   "source": "marketState"}
+        elif state == "CLOSED":
+            out = {"trading": False,
+                   "reason": "exchange reports CLOSED on a weekday — trading holiday",
+                   "source": "marketState"}
+
+        # A bar dated today settles it regardless of what marketState said.
+        if out["trading"] is not True:
+            bars = handle.history(period="5d", interval="1d")
+            dates = [str(i.date()) for i in bars.index
+                     if bars.loc[i, "Close"] == bars.loc[i, "Close"]]
+            if today in dates:
+                out = {"trading": True, "reason": "benchmark printed a bar today",
+                       "source": "price data"}
+    except Exception as exc:                                       # noqa: BLE001
+        say(f"trading-day check failed ({type(exc).__name__}) — assuming open")
+
+    if out["trading"] is False:
+        say(f"not a trading day: {out['reason']}")
+
+    _TRADING_DAY_CACHE.update({"date": today, "value": out})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # market regime
 # ---------------------------------------------------------------------------
 #
