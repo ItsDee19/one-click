@@ -511,6 +511,7 @@
     color:var(--amber);background:var(--amber-soft);
   }
   .ipoflag.unofficial{color:var(--faint);background:var(--unavailable-soft);}
+  .ipoflag.ok{color:var(--green);background:var(--green-soft);}
   .badge.APPLY{background:var(--green-soft);color:var(--green);}
   .badge.NEUTRAL{background:var(--amber-soft);color:var(--amber);}
   .badge.AVOID{background:var(--red-soft);color:var(--red);}
@@ -1332,6 +1333,14 @@
       (v.blockers || []).forEach(function (b) {
         flags += '<span class="ipoflag">' + esc(b) + '</span>';
       });
+      if (f.auto_read) {
+        flags += '<span class="ipoflag ok" title="' + esc(f.pe_basis || "") + '">' +
+                 'read from the offer document</span>';
+      }
+      if (f.unverified_dropped && f.unverified_dropped.length) {
+        flags += '<span class="ipoflag">⚠ ' + f.unverified_dropped.length +
+                 ' figure(s) dropped as unverifiable</span>';
+      }
       if (g.premium_pct !== null && g.premium_pct !== undefined) {
         flags += '<span class="ipoflag unofficial" title="' + esc(g.trust || "") +
                  '">GMP ' + pct(g.premium_pct) + ' · unofficial</span>';

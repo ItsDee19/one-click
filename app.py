@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, jsonify, request
 
 import data_sources
+import drhp
 import fundamentals
 import history
 import ipo
@@ -832,7 +833,8 @@ def run_cycle(mode, capital=None):
                     return research.gather(symbol, name + " IPO",
                                            data_sources.score_headline, log=log,
                                            max_items=4)
-                book = ipo.review(log=log, news_fn=_ipo_news)
+                book = ipo.review(log=log, news_fn=_ipo_news,
+                                  drhp_fn=_ipo_drhp_reader())
                 with LOCK:
                     STATE["ipos"] = book
             except Exception as exc:                               # noqa: BLE001
@@ -1373,6 +1375,35 @@ def sectors_route():
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 
 
+def _ipo_drhp_reader():
+    """
+    A reader for drhp.analyse that shares the app's LLM provider.
+
+    Returns None when no model is available, in which case the desk falls back
+    to whatever is hand-entered in ipo_notes.json rather than guessing.
+    """
+    provider = llm.detect_provider()
+    if provider.get("provider") == "deterministic":
+        return None
+
+    def call(prompt):
+        name = provider["provider"]
+        if name == "claude_code":
+            return llm.call_claude_code(prompt, provider["model"])
+        if name == "anthropic":
+            return llm.call_anthropic(prompt, provider["model"])
+        if name == "openai":
+            return llm.call_openai(prompt, provider["model"])
+        raise RuntimeError(f"unknown provider {name!r}")
+
+    rows = drhp.offer_index(log=log)
+
+    def read(symbol, name, band_high):
+        return drhp.analyse(symbol, name, band_high, llm_call=call,
+                            rows=rows, log=log)
+    return read
+
+
 @app.get("/ipos")
 def ipos_route():
     """Upcoming and open IPOs, with an apply/avoid read on each."""
@@ -1382,7 +1413,8 @@ def ipos_route():
                 return None
             return research.gather(symbol, name + " IPO",
                                    data_sources.score_headline, log=log, max_items=4)
-        return jsonify(ipo.review(log=log, news_fn=_news))
+        return jsonify(ipo.review(log=log, news_fn=_news,
+                                  drhp_fn=_ipo_drhp_reader()))
     except Exception as exc:                                       # noqa: BLE001
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 

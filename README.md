@@ -433,11 +433,48 @@ any stock run.
 | Calendar, price band, dates | **NSE, official, fetched live** |
 | Subscription by category | **NSE, official, fetched live** |
 | News | public RSS, sanitised |
-| DRHP financials | **hand-entered** — the DRHP is a PDF |
+| DRHP financials | **fetched and read automatically** (see below) |
 | GMP | **hand-entered, unofficial** |
 
 The NSE IPO endpoints are open, unlike its quote API which returns 403, so the
 calendar and the live bid book are real and verifiable.
+
+### Reading the offer document
+
+`drhp.py` closes the gap that left every issue reading "no DRHP financials on
+file". NSE publishes an offer-documents index with direct PDF links — open,
+unlike its quote API — so the desk fetches the DRHP itself.
+
+A DRHP runs 300-700 pages, so it is not fed to a model whole. Every page is
+scored for the signals that matter (`Basis for Issue Price`, the peer table,
+RoNW, diluted EPS) and only the handful that carry numbers are sent. A real
+run: **365 pages, 8.2 MB, six pages kept, 20,603 characters extracted.**
+
+The tables extract as run-together text that regex cannot parse reliably, so
+the model reads them — and **every figure it returns is checked against the
+source text before it is shown.** Anything untraceable is dropped and counted
+on the card, not printed.
+
+**The P/E is computed, not read.** A DRHP is filed before pricing, so it shows
+`[●]` where the P/E will go. The document's EPS and the exchange's actual
+price band give the real figure from two sourced numbers:
+
+```
+PRIORITY   EPS 5.67, band ₹200  ->  P/E 35.27  against a peer set at 17.83
+```
+
+A P/E is never computed on negative earnings — that is an artifact, not a
+valuation, and printing "-19.81x" beside a peer's "17.83x" invites exactly the
+wrong comparison. Loss-making is reported as the finding instead:
+
+```
+PERNIASPOP  revenue ₹494 Cr, loss ₹188.55 Cr, EPS -29.03  ->  AVOID
+```
+
+Results are cached for 30 days — a filed document does not change — so the
+download and parse happen once per company, not once per run. `ipo_notes.json`
+still works and always wins: a value you typed is more trustworthy than an
+automated read.
 
 ### On GMP
 

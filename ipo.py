@@ -9,7 +9,8 @@ commentary is full of numbers nobody can source.
   calendar + price band + dates   NSE, official, fetched live
   subscription by category        NSE, official, fetched live
   news                            public RSS, sanitised (see research.py)
-  financials from the DRHP        NOT machine-readable — hand-entered
+  financials from the DRHP        fetched and read automatically (see drhp.py),
+                                  with ipo_notes.json as a manual override
   GMP (grey market premium)       NOT official — hand-entered, see below
 
 The NSE IPO endpoints are open, unlike its quote API which returns 403. So the
@@ -248,11 +249,37 @@ def load_notes(path=NOTES_FILE) -> dict:
 # evidence
 # ---------------------------------------------------------------------------
 
-def build_evidence(item, notes=None, news=None) -> dict:
-    """One IPO as an evidence bundle, with every missing field named."""
+def build_evidence(item, notes=None, news=None, drhp_blob=None) -> dict:
+    """
+    One IPO as an evidence bundle, with every missing field named.
+
+    Financials come from the offer document when drhp.py could read one, and
+    from ipo_notes.json otherwise. A hand-entered value always wins: if you
+    have gone to the trouble of typing it, it is more trustworthy than an
+    automated read of a 400-page PDF.
+    """
     notes = notes or {}
-    fin = notes.get("financials") or {}
     gmp = notes.get("gmp") or {}
+    manual = notes.get("financials") or {}
+
+    auto = {}
+    fin_source = None
+    if drhp_blob and drhp_blob.get("available"):
+        auto = drhp_blob.get("financials") or {}
+        fin_source = drhp_blob.get("source")
+
+    def pick(key):
+        value = manual.get(key)
+        return value if value not in (None, "") else auto.get(key)
+
+    fin = {k: pick(k) for k in
+           ("revenue_cr", "revenue_growth_pct", "profit_cr", "profit_growth_pct",
+            "pe_post_issue", "peer_pe", "roe_pct", "debt_to_equity")}
+    # the document calls it RoNW; the panel reads roe_pct
+    if fin.get("roe_pct") in (None, "") and auto.get("ronw_pct") is not None:
+        fin["roe_pct"] = auto.get("ronw_pct")
+    fin["source"] = manual.get("source") or fin_source
+    fin["as_of"] = manual.get("as_of") or (auto.get("fiscal_year"))
 
     band_high = item["price_band"]["high"]
     gmp_value = _num(gmp.get("premium_rs"))
@@ -271,6 +298,11 @@ def build_evidence(item, notes=None, news=None) -> dict:
         "debt_to_equity": _num(fin.get("debt_to_equity")),
         "source": fin.get("source"),
         "as_of": fin.get("as_of"),
+        "auto_read": bool(auto),
+        "pe_basis": auto.get("pe_basis"),
+        "document": (drhp_blob or {}).get("document"),
+        "unverified_dropped": auto.get("unverified_dropped") or [],
+        "document_note": (drhp_blob or {}).get("reason") if not auto else None,
     }
     evidence["gmp"] = {
         "premium_rs": gmp_value,
@@ -520,7 +552,8 @@ def evaluate(evidence: dict) -> dict:
 # the whole desk
 # ---------------------------------------------------------------------------
 
-def review(log=None, scorer=None, news_fn=None, evaluate_fn=None) -> dict:
+def review(log=None, scorer=None, news_fn=None, evaluate_fn=None,
+           drhp_fn=None) -> dict:
     """
     Fetch the calendar, gather evidence, judge every live issue.
 
@@ -547,7 +580,14 @@ def review(log=None, scorer=None, news_fn=None, evaluate_fn=None) -> dict:
                 news = news_fn(item["symbol"], item["name"])
             except Exception:                                      # noqa: BLE001
                 news = None
-        evidence = build_evidence(item, notes.get(item["symbol"]), news)
+        blob = None
+        if drhp_fn:
+            try:
+                blob = drhp_fn(item["symbol"], item["name"],
+                               item["price_band"]["high"])
+            except Exception as exc:                               # noqa: BLE001
+                say(f"DRHP read failed for {item['symbol']} ({type(exc).__name__})")
+        evidence = build_evidence(item, notes.get(item["symbol"]), news, blob)
         result = (evaluate_fn or evaluate)(evidence)
         rows.append({**item,
                      "verdict": result["verdict"],

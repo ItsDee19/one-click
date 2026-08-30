@@ -13,3 +13,4 @@ server.err
 # backtest output
 backtest_results.json
 backtest_5y.json
+.drhp_cache/
