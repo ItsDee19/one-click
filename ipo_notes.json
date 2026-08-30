@@ -1,0 +1,202 @@
+{
+ "_comment": "Hand-entered supplement to the official NSE IPO feed. The calendar, price band and subscription come from the exchange automatically; these two blocks cannot, and are never guessed.",
+ "_financials": [
+  "From the company's DRHP/RHP, which is a PDF and not machine-readable.",
+  "Find it on the lead manager's site, SEBI, or the NSE/BSE issue page.",
+  "revenue_cr / profit_cr: latest full year, in Rs crore.",
+  "pe_post_issue: the RHP states this at the upper band.",
+  "peer_pe: the RHP's own peer-comparison table gives it.",
+  "Record source and as_of so a stale entry is obvious."
+ ],
+ "_gmp": [
+  "OPTIONAL and UNOFFICIAL. Grey market premium has no exchange publisher,",
+  "SEBI has cautioned against relying on it, and quotes are easily moved by",
+  "the operators who benefit. The engine caps its weight and can never issue",
+  "APPLY on GMP alone - official demand or financials must agree.",
+  "Leave it null unless you have a reason to track it."
+ ],
+ "_example": {
+  "SOMECO": {
+   "name": "Some Company Ltd",
+   "financials": {
+    "revenue_cr": 812.4,
+    "revenue_growth_pct": 28.1,
+    "profit_cr": 95.2,
+    "profit_growth_pct": 41.0,
+    "pe_post_issue": 18.4,
+    "peer_pe": 26.2,
+    "roe_pct": 22.3,
+    "debt_to_equity": 0.4,
+    "source": "RHP p.88 'Basis for Issue Price'",
+    "as_of": "2026-08-01"
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  }
+ },
+ "companies": {
+  "ASHUTOSH": {
+   "name": "Ashutosh Fibre Limited",
+   "financials": {
+    "revenue_cr": null,
+    "revenue_growth_pct": null,
+    "profit_cr": null,
+    "profit_growth_pct": null,
+    "pe_post_issue": null,
+    "peer_pe": null,
+    "roe_pct": null,
+    "debt_to_equity": null,
+    "source": null,
+    "as_of": null
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  },
+  "DEEPA": {
+   "name": "Deepa Jewellers Limited",
+   "financials": {
+    "revenue_cr": null,
+    "revenue_growth_pct": null,
+    "profit_cr": null,
+    "profit_growth_pct": null,
+    "pe_post_issue": null,
+    "peer_pe": null,
+    "roe_pct": null,
+    "debt_to_equity": null,
+    "source": null,
+    "as_of": null
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  },
+  "ESDS": {
+   "name": "ESDS Software Solution Limited",
+   "financials": {
+    "revenue_cr": null,
+    "revenue_growth_pct": null,
+    "profit_cr": null,
+    "profit_growth_pct": null,
+    "pe_post_issue": null,
+    "peer_pe": null,
+    "roe_pct": null,
+    "debt_to_equity": null,
+    "source": null,
+    "as_of": null
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  },
+  "LUMINO": {
+   "name": "Lumino Industries Limited",
+   "financials": {
+    "revenue_cr": null,
+    "revenue_growth_pct": null,
+    "profit_cr": null,
+    "profit_growth_pct": null,
+    "pe_post_issue": null,
+    "peer_pe": null,
+    "roe_pct": null,
+    "debt_to_equity": null,
+    "source": null,
+    "as_of": null
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  },
+  "MOMSBELIEF": {
+   "name": "Rays of Belief Limited- For Profit Social Enterprise (FPSE)",
+   "financials": {
+    "revenue_cr": null,
+    "revenue_growth_pct": null,
+    "profit_cr": null,
+    "profit_growth_pct": null,
+    "pe_post_issue": null,
+    "peer_pe": null,
+    "roe_pct": null,
+    "debt_to_equity": null,
+    "source": null,
+    "as_of": null
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  },
+  "PERNIASPOP": {
+   "name": "Purple Style Labs Limited",
+   "financials": {
+    "revenue_cr": null,
+    "revenue_growth_pct": null,
+    "profit_cr": null,
+    "profit_growth_pct": null,
+    "pe_post_issue": null,
+    "peer_pe": null,
+    "roe_pct": null,
+    "debt_to_equity": null,
+    "source": null,
+    "as_of": null
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  },
+  "PRIORITY": {
+   "name": "Priority Jewels Limited",
+   "financials": {
+    "revenue_cr": null,
+    "revenue_growth_pct": null,
+    "profit_cr": null,
+    "profit_growth_pct": null,
+    "pe_post_issue": null,
+    "peer_pe": null,
+    "roe_pct": null,
+    "debt_to_equity": null,
+    "source": null,
+    "as_of": null
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  },
+  "SHANTIINOR": {
+   "name": "Shanti Inorganics Limited",
+   "financials": {
+    "revenue_cr": null,
+    "revenue_growth_pct": null,
+    "profit_cr": null,
+    "profit_growth_pct": null,
+    "pe_post_issue": null,
+    "peer_pe": null,
+    "roe_pct": null,
+    "debt_to_equity": null,
+    "source": null,
+    "as_of": null
+   },
+   "gmp": {
+    "premium_rs": null,
+    "as_of": null,
+    "source": null
+   }
+  }
+ }
+}

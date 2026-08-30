@@ -420,6 +420,56 @@ correlated, not independent positions
 
 ---
 
+## IPO desk
+
+Every open and upcoming issue on the NSE calendar, with an APPLY / NEUTRAL /
+AVOID read on each. `GET /ipos`, and it loads on the dashboard independently of
+any stock run.
+
+### Where each number comes from
+
+| | Source |
+|---|---|
+| Calendar, price band, dates | **NSE, official, fetched live** |
+| Subscription by category | **NSE, official, fetched live** |
+| News | public RSS, sanitised |
+| DRHP financials | **hand-entered** — the DRHP is a PDF |
+| GMP | **hand-entered, unofficial** |
+
+The NSE IPO endpoints are open, unlike its quote API which returns 403, so the
+calendar and the live bid book are real and verifiable.
+
+### On GMP
+
+Grey market premium is quoted by unofficial dealers in an unregulated market.
+No exchange publishes it, SEBI has cautioned against relying on it, and the
+quotes circulating on aggregator sites are trivially moved by the operators who
+benefit from them. Scraping one and printing it beside official exchange data
+would lend it credibility it has not earned.
+
+So GMP is optional, hand-entered, always labelled unofficial, and **capped** —
+it can never carry a verdict on its own. Verified: an issue with a strong GMP
+and nothing else returns NEUTRAL, not APPLY.
+
+**Subscription is the better signal and it is free**: the same demand,
+measured by the exchange instead of by a rumour.
+
+### What APPLY requires
+
+Beyond the score, two hard conditions:
+
+- the exchange must actually be showing demand (≥1.5x)
+- DRHP financials must be on file, so the *business* can be assessed rather
+  than just the appetite for its paper
+
+An issue with neither is reported NEUTRAL with the blockers named on the card —
+`no DRHP financials on file` — rather than guessed at.
+
+Fill `ipo_notes.json` from the RHP's "Basis for Issue Price" section, which
+carries both the post-issue P/E and the peer comparison table.
+
+---
+
 ## Sector heatmap
 
 Two independent readings, because either alone misleads:
@@ -760,6 +810,8 @@ app.py            server, agent state machine, Telegram, SQLite
 backtest.py       point-in-time historical replay of the scoring engine
 sectors.py        sector heatmap: index moves + universe breadth
 fundamentals.py   order book vs quarterly sales screen
+ipo.py            NSE IPO calendar, subscription, apply/avoid judge
+ipo_notes.json    hand-entered DRHP financials (and optional GMP)
 orderbook.json    hand-maintained order book values (not fetchable)
 market.py         NSE trading phase + session-elapsed maths
 portfolio.py      position sizing, risk limits, paper account (no broker)
@@ -788,6 +840,7 @@ signals.db        SQLite audit (created on first run)
 | `GET /scoreboard` | the desk's own record: open signals, settled outcomes, hit rates with confidence intervals, and confidence calibration |
 | `GET /sectors` | sector heatmap: index moves, breadth, leaders and laggards |
 | `GET /orderbook` | stocks whose order book exceeds last quarter's sales |
+| `GET /ipos` | open and upcoming IPOs with an apply/avoid read |
 | `GET /portfolio` | the paper account: equity, open positions, closed trades, headroom |
 
 ### Audit

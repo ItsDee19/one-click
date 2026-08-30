@@ -27,6 +27,7 @@ from flask import Flask, Response, jsonify, request
 import data_sources
 import fundamentals
 import history
+import ipo
 import llm
 import market
 import portfolio
@@ -211,6 +212,7 @@ def fresh_state():
         "regime": market.regime(),
         "sector_heat": {},
         "orderbook": {},
+        "ipos": {},
         "capital": None,
         "agents": fresh_agents(),
         "verdicts": [],
@@ -819,6 +821,23 @@ def run_cycle(mode, capital=None):
             except Exception as exc:                               # noqa: BLE001
                 log(f"sector heatmap skipped ({type(exc).__name__})")
 
+        # The IPO desk is independent of the stock universe: it reads the
+        # exchange's own calendar. It runs in live mode only, since the demo
+        # bundles have no IPO equivalent.
+        if mode == "live":
+            try:
+                def _ipo_news(symbol, name):
+                    if env_str("WEB_RESEARCH", "1") in ("0", "false", "no"):
+                        return None
+                    return research.gather(symbol, name + " IPO",
+                                           data_sources.score_headline, log=log,
+                                           max_items=4)
+                book = ipo.review(log=log, news_fn=_ipo_news)
+                with LOCK:
+                    STATE["ipos"] = book
+            except Exception as exc:                               # noqa: BLE001
+                log(f"IPO desk skipped ({type(exc).__name__}: {scrub(exc)})")
+
         try:
             universe_for_screen = (data_sources.load_universe()
                                    if mode == "live" else {})
@@ -1350,6 +1369,20 @@ def sectors_route():
     try:
         quotes, _bench = data_sources.fetch_quotes(data_sources.load_universe(), log=log)
         return jsonify(sectors.heatmap(quotes, log=log))
+    except Exception as exc:                                       # noqa: BLE001
+        return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
+
+
+@app.get("/ipos")
+def ipos_route():
+    """Upcoming and open IPOs, with an apply/avoid read on each."""
+    try:
+        def _news(symbol, name):
+            if env_str("WEB_RESEARCH", "1") in ("0", "false", "no"):
+                return None
+            return research.gather(symbol, name + " IPO",
+                                   data_sources.score_headline, log=log, max_items=4)
+        return jsonify(ipo.review(log=log, news_fn=_news))
     except Exception as exc:                                       # noqa: BLE001
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 

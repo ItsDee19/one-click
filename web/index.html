@@ -482,6 +482,45 @@
   .pill.neutral{background:var(--unavailable-soft);color:var(--faint);}
   .num{font-variant-numeric:tabular-nums;}
 
+  /* ---------------- IPO desk ---------------- */
+  .ipo{
+    padding:14px 18px;border-top:1px solid var(--border);
+    animation:slidein .45s cubic-bezier(.2,.7,.3,1) both;
+    transition:background .2s ease;
+  }
+  .ipo:first-child{border-top:0;}
+  .ipo:hover{background:var(--card-low);}
+  .ipotop{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:9px;}
+  .ipotop .band{margin-left:auto;font-size:12.5px;font-weight:640;
+                font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .ipometa{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
+    gap:9px 14px;margin:9px 0 0;padding-top:9px;border-top:1px solid var(--border);
+  }
+  .ipometa .k{
+    font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);font-weight:700;
+  }
+  .ipometa .v{font-size:13px;font-weight:620;margin-top:2px;
+              font-variant-numeric:tabular-nums;}
+  .ipometa .v.dim{color:var(--faint);font-weight:450;}
+  .ipowhy{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin-top:9px;}
+  .ipoflag{
+    display:inline-block;margin-top:7px;margin-right:6px;font-size:10px;font-weight:700;
+    letter-spacing:.05em;padding:3px 8px;border-radius:6px;
+    color:var(--amber);background:var(--amber-soft);
+  }
+  .ipoflag.unofficial{color:var(--faint);background:var(--unavailable-soft);}
+  .badge.APPLY{background:var(--green-soft);color:var(--green);}
+  .badge.NEUTRAL{background:var(--amber-soft);color:var(--amber);}
+  .badge.AVOID{background:var(--red-soft);color:var(--red);}
+  .badge.UNKNOWN{background:var(--unavailable-soft);color:var(--faint);}
+  .wchip{
+    font-size:9px;font-weight:750;letter-spacing:.09em;text-transform:uppercase;
+    padding:3px 8px;border-radius:5px;background:var(--unavailable-soft);color:var(--faint);
+  }
+  .wchip.open{background:var(--accent-soft);color:var(--accent);}
+
   /* ---------------- log ---------------- */
   details.log{margin-top:20px;}
   details.log summary{
@@ -763,6 +802,12 @@
   </div>
   <div class="agents enter d3" id="agents"></div>
 
+  <div class="sechead" id="ipohead" style="display:none">
+    <h2>IPO desk</h2>
+    <span class="note" id="iponote"></span>
+  </div>
+  <div class="feed" id="ipofeed" style="display:none;margin-bottom:30px"></div>
+
   <div class="sechead" id="obhead" style="display:none">
     <h2>Order book &gt; last quarter's sales</h2>
     <span class="note" id="obnote"></span>
@@ -827,6 +872,18 @@
   })();
 
   function api(path) { return API + path; }
+
+  /* The IPO calendar is independent of any stock run, so it is fetched once
+     on load rather than waiting for one. A live run replaces it. */
+  var IPO_BOOK = {};
+  function loadIpos() {
+    fetch(api("/ipos"))
+      .then(function (r) { return r.json(); })
+      .then(function (book) {
+        if (book && book.generated) { IPO_BOOK = book; renderIpos(book); }
+      })
+      .catch(function () { /* exchange feed down: the section stays hidden */ });
+  }
 
   var el = function (id) { return document.getElementById(id); };
   var CFG = null, agentNodes = {}, renderedVerdicts = 0, lastRunKey = "";
@@ -899,6 +956,7 @@
       " · telegram: " + (cfg.telegram_configured ? "configured" : "not configured") +
       " · BUY at " + cfg.confidence_threshold + "/10+";
     buildAgents(cfg.agents);
+    loadIpos();
     if (!cfg.telegram_configured) {
       banner("warn", "Telegram is not configured — signals will be shown here but not delivered. " +
                      "Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to .env and restart.");
@@ -1060,6 +1118,9 @@
       s.status === "error" ? "run stopped — see the log" :
       "all " + done + " agents done · mode " + s.mode);
 
+    /* a live run refreshes the desk; otherwise the boot fetch stands */
+    if (s.ipos && s.ipos.generated) { IPO_BOOK = s.ipos; }
+    renderIpos(IPO_BOOK);
     renderSectors(s.sector_heat || {});
     renderOrderBook(s.orderbook || {});
 
@@ -1229,6 +1290,74 @@
         '</div>';
     });
     feed.innerHTML = html;
+  }
+
+  function renderIpos(book) {
+    var head = el("ipohead"), feed = el("ipofeed");
+    var rows = book && book.ipos ? book.ipos : [];
+    if (!book || !book.generated) { head.style.display = "none"; feed.style.display = "none"; return; }
+    head.style.display = ""; feed.style.display = "";
+
+    var applies = rows.filter(function (r) { return r.verdict.verdict === "APPLY"; }).length;
+    text(el("iponote"), rows.length
+      ? rows.length + " live · " + book.open + " open · " + applies + " rated apply"
+      : "no open or upcoming issues on the exchange calendar");
+
+    if (!rows.length) {
+      feed.innerHTML = '<div class="empty">The NSE calendar currently lists no open ' +
+        'or upcoming IPOs.</div>';
+      return;
+    }
+
+    feed.innerHTML = rows.map(function (r) {
+      var v = r.verdict, f = r.financials || {}, g = r.gmp || {};
+      var sub = r.subscription ? r.subscription.total : null;
+
+      function cell(k, val, dim) {
+        return '<div><div class="k">' + esc(k) + '</div><div class="v' +
+               (dim ? ' dim' : '') + '">' + val + '</div></div>';
+      }
+      var meta = "";
+      meta += cell("Subscription", sub !== null && sub !== undefined
+        ? sub.toFixed(2) + "x" : "—", sub === null || sub === undefined);
+      meta += cell("Issue size", r.issue && r.issue.value_cr
+        ? "₹" + Number(r.issue.value_cr).toLocaleString("en-IN") + " Cr" : "—",
+        !(r.issue && r.issue.value_cr));
+      meta += cell("Closes", esc(r.closes || "—") +
+        (r.days_to_close !== null && r.days_to_close !== undefined && r.window === "open"
+          ? ' <span class="subtle">T-' + r.days_to_close + '</span>' : ''), !r.closes);
+      meta += cell("P/E post", f.pe_post_issue !== null && f.pe_post_issue !== undefined
+        ? f.pe_post_issue + "x" : "—", f.pe_post_issue === null || f.pe_post_issue === undefined);
+      meta += cell("Peer P/E", f.peer_pe !== null && f.peer_pe !== undefined
+        ? f.peer_pe + "x" : "—", f.peer_pe === null || f.peer_pe === undefined);
+      meta += cell("Profit", f.profit_cr !== null && f.profit_cr !== undefined
+        ? "₹" + Number(f.profit_cr).toLocaleString("en-IN") + " Cr" : "—",
+        f.profit_cr === null || f.profit_cr === undefined);
+
+      var flags = "";
+      (v.blockers || []).forEach(function (b) {
+        flags += '<span class="ipoflag">' + esc(b) + '</span>';
+      });
+      if (g.premium_pct !== null && g.premium_pct !== undefined) {
+        flags += '<span class="ipoflag unofficial" title="' + esc(g.trust || "") +
+                 '">GMP ' + pct(g.premium_pct) + ' · unofficial</span>';
+      }
+
+      return '<div class="ipo">' +
+        '<div class="ipotop">' +
+          '<span class="badge ' + esc(v.verdict) + '">' + esc(v.verdict) + '</span>' +
+          '<span class="sym">' + esc(r.symbol) + '</span>' +
+          '<span class="wchip ' + esc(r.window) + '">' + esc(r.window) + '</span>' +
+          (v.confidence ? '<span class="conf">' + v.confidence + '<small>/10</small></span>' : '') +
+          '<span class="band">' + (r.price_band && r.price_band.low
+            ? "₹" + r.price_band.low + "–" + r.price_band.high : "—") + '</span>' +
+        '</div>' +
+        '<div class="subtle" style="white-space:normal">' + esc(r.name || "") + '</div>' +
+        '<div class="ipometa">' + meta + '</div>' +
+        '<div class="ipowhy">' + esc(v.rationale) + '</div>' +
+        flags +
+        '</div>';
+    }).join("");
   }
 
   function trackCell(label, track) {
