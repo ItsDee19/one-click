@@ -58,39 +58,64 @@ wrong shape for this.
 
 ## Backend hosting
 
-Ranked for this specific workload. **Verify current free-tier terms yourself —
-they change often, and some of these have tightened since.**
+The three constraints above eliminate most of the field before you compare
+anything. Checked September 2026 — **verify current terms yourself, because
+these change often and two of them changed materially in the last year.**
 
-### Recommended: Oracle Cloud Always Free
+| Host | Always on | Real disk | Free permanently | |
+|---|---|---|---|---|
+| **Oracle Cloud Always Free** | yes | yes, 200 GB | yes | **the default** |
+| Google Cloud `e2-micro` | yes | yes, 30 GB | yes, no expiry | fallback |
+| Fly.io | yes | $0.15/GB/mo | **no longer** | ~$2-4/mo |
+| Koyeb free | no | no | yes | fails both |
+| Render free | no | no | yes | schedule dies |
+| Railway | yes | yes | no, $5 credit | runs out |
+| Cloud Run | no | no | yes | needs external cron |
+| AWS / Azure | 12 months, then billed | | no | no permanent free VM |
 
-A genuine always-on VM, persistent disk, no sleep, free indefinitely rather
-than as a trial. ARM instances offer very generous specs.
+### The default: Oracle Cloud Always Free
 
-- ✅ always on, real disk, cron if you want it
-- ✅ enough resources to run Sonnet-class workloads comfortably
-- ⚠️ signup requires a card for verification and capacity is sometimes
-  unavailable in popular regions
-- ⚠️ it is a bare VM: you manage the OS, Python, and a `systemd` unit
+The only host that meets all three constraints permanently, and it has a
+**Mumbai region** — closest to the exchange feed.
 
-```bash
-sudo apt update && sudo apt install -y python3-pip git
-git clone https://github.com/ItsDee19/one-click.git && cd one-click
-pip3 install -r requirements.txt
-cp .env.example .env && nano .env        # add your keys
-```
+- ✅ genuinely always on, real block storage, free indefinitely rather than as
+  a trial
+- ✅ a bare VM, so the in-process scheduler survives exactly as written and
+  nothing has to be restructured
+- ⚠️ signup wants a card for verification, and Mumbai capacity is sometimes
+  unavailable — retry, or fall back to Google below
+- ⚠️ you manage the OS, Python and a `systemd` unit yourself
 
-Then a service so it survives reboots — see `systemd` below.
+Oracle **halved** the Always Free ARM allowance in June 2026, from 4 OCPU /
+24 GB to 2 OCPU / 12 GB, enforced from 18 August 2026, terminating instances
+over the limit. Irrelevant here: this app wants ~512 MB, so 12 GB is roughly
+twenty times what it needs. The 200 GB of block storage was not touched.
 
-### Fly.io
+Full walkthrough in **Deploying to Oracle** below.
 
-Container platform with persistent volumes and no forced sleep on small apps.
-Closest thing to "just push it" that still meets the constraints.
+### Fallback: Google Cloud `e2-micro`
 
-- ✅ persistent volume for SQLite, always-on
-- ✅ simple deploy, region can be set to Mumbai (`bom`) for latency
-- ⚠️ free allowance has narrowed; a small always-on machine may incur a few
-  dollars a month
-- A `fly.toml` and `Dockerfile` are included in this repo
+The only permanent free VM among the big three, with no 12-month expiry. Take
+it if Oracle has no capacity in a region you want.
+
+- ✅ always on, persistent disk, free with no expiry
+- ⚠️ US regions only (`us-west1`, `us-central1`, `us-east1`), so every NSE
+  request crosses an ocean
+- ⚠️ 1 GB/month egress, and `e2-micro` is 1 GB shared RAM — workable but tight
+  next to Oracle's headroom
+
+The Oracle walkthrough below applies unchanged apart from the provisioning
+step; it is the same Ubuntu VM and the same `systemd` unit.
+
+### Fly.io — no longer free
+
+Fly withdrew its free tier for accounts created after **October 2024**. New
+signups get a short trial, and volumes bill at $0.15/GB/month whether or not
+the machine is running. A small always-on machine here is a few dollars a
+month, not zero.
+
+`fly.toml` and `Dockerfile` are still in this repo and still correct, so this
+remains a good paid option, or a free one on a legacy account:
 
 ```bash
 fly launch --no-deploy
@@ -99,24 +124,23 @@ fly secrets set ANTHROPIC_API_KEY=... TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=..
 fly deploy
 ```
 
-### Google Cloud Run + Cloud Scheduler
-
-Scales to zero, so you pay nothing while idle — but that is exactly the sleep
-problem. Workable only if you **drop the in-process scheduler** and let Cloud
-Scheduler POST to `/start` on a cron, which means restructuring how runs are
-triggered.
-
-- ✅ genuinely free at this volume
-- ❌ ephemeral filesystem: needs Cloud SQL or GCS for the database
-- ❌ the elegant part of this project (a scheduler that understands market
-  phase) gets replaced by external cron
-
 ### Not suitable
 
+- **Koyeb free** — looks ideal until the details: free instances force
+  scale-to-zero after an hour idle and **cannot** be disabled, and free
+  instances cannot attach volumes at all. It fails both hard constraints.
 - **Render free tier** — web services sleep after 15 minutes idle; cron jobs
   are a paid feature. The schedule will not fire.
+- **Railway** — always-on, but on trial credit rather than a free tier. It
+  stops when the credit does.
+- **Google Cloud Run** — scales to zero with an ephemeral filesystem. Workable
+  only by dropping the in-process scheduler for Cloud Scheduler POSTing to
+  `/start`, and moving the database off local disk. That trades away the part
+  of this project that understands market phase.
+- **AWS / Azure** — free instances are 12-month promotions that silently
+  convert to paid. Neither has a permanent free VM.
 - **Vercel / Netlify functions** — serverless, no long-lived threads, no disk.
-  Fine for the frontend, wrong for this backend.
+  Right for the frontend, wrong for this backend.
 - **PythonAnywhere free** — outbound network is allowlisted, and Yahoo
   Finance is not on the allowlist.
 - **Heroku** — no meaningful free tier any more.
@@ -189,7 +213,59 @@ a local backend while you develop.
 
 ---
 
-## systemd unit (Oracle / any Linux VM)
+## Deploying to Oracle
+
+End to end on a fresh Always Free VM. Roughly twenty minutes, most of it
+waiting on Oracle's console.
+
+### 1. The instance
+
+Create a VM in the Oracle console:
+
+- **Shape** `VM.Standard.A1.Flex` (ARM), 1 OCPU / 6 GB — inside the 2 OCPU /
+  12 GB Always Free limit with room to spare. `VM.Standard.E2.1.Micro` (AMD)
+  also works and is a separate allowance if ARM capacity is out.
+- **Image** Canonical Ubuntu 24.04
+- **Region** Mumbai (`ap-mumbai-1`) for latency to NSE
+- Save the SSH keypair it offers — that is the only copy
+
+Confirm the shape says **Always Free eligible** before you create it. A shape
+outside the allowance bills silently.
+
+### 2. Open the port
+
+Two layers, and missing either one produces the same symptom: a server that
+looks healthy over SSH and is unreachable from the internet.
+
+In the console, add an ingress rule to the subnet's security list — source
+`0.0.0.0/0`, TCP, destination port `8080`. Then on the box itself, because
+Oracle's Ubuntu images ship with iptables already populated:
+
+```bash
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 8080 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+### 3. Install
+
+```bash
+ssh -i your-key.pem ubuntu@<public-ip>
+sudo apt update && sudo apt install -y python3-pip python3-venv git
+git clone https://github.com/ItsDee19/one-click.git && cd one-click
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+### 4. Configure
+
+```bash
+cp .env.example .env && nano .env
+```
+
+Set `ALLOWED_ORIGINS` to your exact Vercel origin, and add the Telegram token
+and chat id. Leave `ANTHROPIC_API_KEY` unset to run deterministic — see the
+constraints section on what that costs you, which is less than it sounds.
+
+### 5. Run it as a service
 
 ```ini
 # /etc/systemd/system/dalal-desk.service
@@ -203,7 +279,9 @@ User=ubuntu
 WorkingDirectory=/home/ubuntu/one-click
 EnvironmentFile=/home/ubuntu/one-click/.env
 Environment=HOST=0.0.0.0
-ExecStart=/usr/bin/python3 app.py
+Environment=PORT=8080
+Environment=NO_BROWSER=1
+ExecStart=/home/ubuntu/one-click/.venv/bin/python app.py
 Restart=always
 RestartSec=10
 
@@ -212,12 +290,54 @@ WantedBy=multi-user.target
 ```
 
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl enable --now dalal-desk
 sudo journalctl -u dalal-desk -f
 ```
 
 `Restart=always` matters: a yfinance hiccup that crashes the process would
-otherwise silently end your schedule for the day.
+otherwise silently end your schedule for the day. `NO_BROWSER=1` stops the app
+trying to open a browser on a machine that has none.
+
+### 6. Point the frontend at it
+
+Back on your own machine, rebuild with the VM's address and redeploy:
+
+```bash
+python build_web.py --api http://<public-ip>:8080
+cd web && vercel --prod
+```
+
+Then confirm the two halves agree:
+
+```bash
+curl http://<public-ip>:8080/health
+```
+
+`engine` tells you whether a key was picked up, and `scheduler.next_run_label`
+tells you the schedule survived the boot.
+
+### On HTTPS
+
+A Vercel page is served over HTTPS, and a browser will refuse to call a plain
+`http://` backend from it — mixed content is blocked outright. So either put a
+certificate on the VM, or accept that the deployed frontend cannot reach it.
+
+The cheapest fix is Caddy, which obtains and renews a certificate on its own.
+It needs a domain name pointing at the VM; a free subdomain works:
+
+```bash
+sudo apt install -y caddy
+echo 'your-domain.com { reverse_proxy 127.0.0.1:8080 }' | sudo tee /etc/caddy/Caddyfile
+sudo systemctl restart caddy
+```
+
+Then open port 443 the same two ways as step 2, rebuild the frontend against
+`https://your-domain.com`, and set `ALLOWED_ORIGINS` to your Vercel origin.
+
+Until that is done, the deployed dashboard will load but stay empty. The
+backend is reachable directly in a browser tab, and `curl` works regardless —
+it is the browser's mixed-content rule, not the server.
 
 ---
 
