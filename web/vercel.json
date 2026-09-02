@@ -12,12 +12,7 @@
         {
           "key": "Permissions-Policy",
           "value": "geolocation=(), microphone=(), camera=(), payment=()"
-        }
-      ]
-    },
-    {
-      "source": "/index.html",
-      "headers": [
+        },
         { "key": "Cache-Control", "value": "no-store, must-revalidate" }
       ]
     }

@@ -1,0 +1,34 @@
+# The Dockerfile does `COPY . .`, so anything not excluded here is baked into
+# the image — and image layers are readable by anyone who can pull the image.
+
+# secrets — never in an image. The platform injects these as real env vars
+# (fly secrets / systemd EnvironmentFile), and app.py's loader lets a real env
+# var win over .env, so a copied .env would also silently shadow the platform's
+# value for any key the platform did not set.
+.env
+
+# the track record lives on the mounted volume at /data, not in the image.
+# Copying a local signals.db in would seed every deploy with this laptop's
+# history and then be shadowed by the volume mount anyway.
+signals.db
+*.db
+
+# fetched artefacts, rebuilt on demand
+.drhp_cache/
+backtest_results.json
+backtest_5y.json
+
+# the static frontend is deployed to Vercel from web/; the backend serves
+# dashboard.html and ipo_page.html from the repo root instead
+web/
+
+# local noise
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+server.log
+server.err
+.venv/
+venv/

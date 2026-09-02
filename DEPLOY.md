@@ -145,7 +145,17 @@ stands down on holidays by itself.
 python build_web.py --api https://your-backend-url
 ```
 
-That writes `web/index.html` with the backend URL baked in. Then:
+That writes **both pages** into `web/` with the backend URL baked into each:
+
+| File | Served at | Contents |
+|---|---|---|
+| `index.html` | `/` | the dashboard and the agent run |
+| `ipo-desk.html` | `/ipo-desk` | the IPO desk |
+
+The dashboard links to `/ipo-desk`, which is the same path Flask serves locally.
+That works on Vercel because `web/vercel.json` sets `cleanUrls`, which maps
+`/ipo-desk` to `ipo-desk.html`. **Re-run the build whenever either page
+changes** — a page left stale in `web/` is what actually gets served.
 
 ```bash
 cd web && vercel --prod
@@ -255,3 +265,36 @@ Check four things in the response:
 Then open the Vercel URL. If the KPIs stay blank and you see a CORS error in
 the browser console, `ALLOWED_ORIGINS` does not list that exact origin —
 including the scheme, and with no trailing slash.
+
+Finally click **IPO desk** in the header, or visit `/ipo-desk` directly. A 404
+there means the deployment is serving a `web/` built before the page existed;
+re-run `build_web.py` and redeploy. The IPO desk fetches offer documents on
+first load and can take a couple of minutes before the cards appear — that is
+the DRHP parse, not a hang, and results are cached for 30 days afterwards.
+
+### Rehearsing the split locally
+
+The whole split can be exercised before paying for anything — this catches CORS
+and baked-URL mistakes, which are most of what goes wrong:
+
+```bash
+python build_web.py --api http://127.0.0.1:5000
+ALLOWED_ORIGINS=http://127.0.0.1:8000 python app.py
+python -m http.server 8000 --directory web
+```
+
+Open `http://127.0.0.1:8000`. If the header fills in with the engine and market
+regime, the cross-origin path works. Note that `/ipo-desk` 404s under
+`http.server`, which does not implement `cleanUrls` — use `/ipo-desk.html`
+locally; only Vercel serves the clean path.
+
+---
+
+## Secrets and the container image
+
+`Dockerfile` ends with `COPY . .`, so `.dockerignore` is what keeps your `.env`
+out of the image. Image layers are readable by anyone who can pull the image,
+and a copied `.env` would also silently shadow the platform's own value for any
+key the platform did not set. Pass secrets as real environment variables
+instead — `fly secrets set`, or systemd's `EnvironmentFile` — and leave `.env`
+for local development only.
