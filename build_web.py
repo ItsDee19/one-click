@@ -12,7 +12,13 @@ The baked value is only a default. A visitor can still override it with
 `?api=https://...`, which the page then remembers in localStorage — useful for
 pointing the same deployment at a local backend while testing.
 
-Run this whenever dashboard.html changes; Vercel serves whatever is in web/.
+Every page gets the same treatment. ipo_page.html is served by Flask at
+/ipo-desk, so it is written as web/ipo-desk.html — with `cleanUrls` set in
+vercel.json that answers to the same /ipo-desk path, and the dashboard's link
+works unchanged whether Flask or Vercel is serving it. A page left out of this
+list would 404 on the deployed frontend while working perfectly in local dev.
+
+Run this whenever a page changes; Vercel serves whatever is in web/.
 """
 
 from __future__ import annotations
@@ -24,18 +30,19 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SOURCE = os.path.join(HERE, "dashboard.html")
 OUT_DIR = os.path.join(HERE, "web")
-OUT_FILE = os.path.join(OUT_DIR, "index.html")
 MARKER = "<!-- build_web.py: api base -->"
 
+# source page -> file written into web/. The output names are what the Flask
+# routes already use, so one URL works in both places.
+PAGES = [
+    ("dashboard.html", "index.html"),
+    ("ipo_page.html", "ipo-desk.html"),
+]
 
-def build(api_base: str) -> str:
-    api_base = (api_base or "").strip().rstrip("/")
-    if api_base and not api_base.startswith(("http://", "https://")):
-        raise SystemExit(f"--api must be an absolute URL, got {api_base!r}")
 
-    with open(SOURCE, "r", encoding="utf-8") as fh:
+def build_page(source: str, out_name: str, api_base: str) -> str:
+    with open(os.path.join(HERE, source), "r", encoding="utf-8") as fh:
         html = fh.read()
 
     # JSON-escape so a stray quote in the URL cannot break out of the string
@@ -61,9 +68,17 @@ def build(api_base: str) -> str:
         html = html.replace("</head>", inject + "</head>", 1)
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    with open(OUT_FILE, "w", encoding="utf-8") as fh:
+    out_file = os.path.join(OUT_DIR, out_name)
+    with open(out_file, "w", encoding="utf-8") as fh:
         fh.write(html)
-    return OUT_FILE
+    return out_file
+
+
+def build(api_base: str) -> list:
+    api_base = (api_base or "").strip().rstrip("/")
+    if api_base and not api_base.startswith(("http://", "https://")):
+        raise SystemExit(f"--api must be an absolute URL, got {api_base!r}")
+    return [build_page(source, out_name, api_base) for source, out_name in PAGES]
 
 
 def main(argv=None):
@@ -72,9 +87,9 @@ def main(argv=None):
                         help="backend base URL, e.g. https://dalal-desk.fly.dev")
     args = parser.parse_args(argv)
 
-    out = build(args.api)
-    size = os.path.getsize(out) / 1024
-    print(f"wrote {out}  ({size:.0f} KB)")
+    for out in build(args.api):
+        size = os.path.getsize(out) / 1024
+        print(f"wrote {out}  ({size:.0f} KB)")
     if args.api:
         print(f"points at {args.api.rstrip('/')}")
         print("\nremember: that backend needs ALLOWED_ORIGINS set to your Vercel URL,")

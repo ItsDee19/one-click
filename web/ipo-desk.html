@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IPO desk · Indian stock analysis</title>
+<style>
+  /* ======================================================================
+     Dalal Desk — IPO page.
+     Reuses the same token system as the main dashboard.
+     ====================================================================== */
+  :root,
+  [data-theme="dark"]{
+    --bg:#080b12;
+    --bg-elev:#0a0e16;
+    --card:#0e1219;
+    --card-low:#0b0f16;
+    --card-high:#141924;
+    --border:#1b2130;
+    --border-strong:#28303f;
+    --ink:#e9eef8;
+    --ink-2:#aab6cc;
+    --muted:#8896ae;
+    --faint:#78859c;
+    --accent:#4cc9f0;
+    --accent-soft:#0c2230;
+    --accent-glow:76,201,240;
+    --green:#3ddc97;
+    --green-soft:#0d2a1f;
+    --amber:#f5b544;
+    --amber-soft:#2b2110;
+    --red:#ff6b6b;
+    --red-soft:#2c1417;
+    --unavailable-soft:#161b24;
+    --grid:rgba(255,255,255,.022);
+    --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -28px rgba(0,0,0,.9);
+    --radius:14px;
+  }
+
+  [data-theme="light"]{
+    --bg:#f5f6f8;
+    --bg-elev:#ffffff;
+    --card:#ffffff;
+    --card-low:#fcfcfd;
+    --card-high:#fafbfc;
+    --border:#e5e7ec;
+    --border-strong:#d6d9e0;
+    --ink:#111520;
+    --ink-2:#3d4451;
+    --muted:#5d6573;
+    --faint:#646c7b;
+    --accent:#2b62ee;
+    --accent-soft:#eef3ff;
+    --accent-glow:43,98,238;
+    --green:#0f7a4d;
+    --green-soft:#e9f6ef;
+    --amber:#94620a;
+    --amber-soft:#fdf3e0;
+    --red:#b02a20;
+    --red-soft:#fdeeec;
+    --unavailable-soft:#f0f1f4;
+    --grid:rgba(17,21,32,.025);
+    --shadow:0 1px 2px rgba(17,21,32,.05), 0 10px 28px -22px rgba(17,21,32,.45);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{
+      animation-duration:.001ms !important;animation-iteration-count:1 !important;
+      transition-duration:.001ms !important;scroll-behavior:auto !important;
+    }
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background-color:var(--bg);
+    color:var(--ink);
+    font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:56px 56px, 56px 56px;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:26px 24px 72px;position:relative;}
+
+  body::before{
+    content:"";position:fixed;inset:0 0 auto 0;height:340px;pointer-events:none;
+    background:radial-gradient(60% 100% at 50% 0%,
+      rgba(var(--accent-glow),.07), transparent 70%);
+    z-index:0;
+  }
+  .wrap > *{position:relative;z-index:1;}
+
+  ::selection{background:rgba(var(--accent-glow),.28);}
+
+  @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+  .enter{animation:rise .5s cubic-bezier(.2,.7,.3,1) both;}
+  .d1{animation-delay:.04s;} .d2{animation-delay:.09s;} .d3{animation-delay:.14s;}
+
+  /* ---------------- header ---------------- */
+  header{
+    display:flex;align-items:center;justify-content:space-between;gap:24px;
+    flex-wrap:wrap;margin-bottom:22px;
+  }
+  .brandline{display:flex;align-items:center;gap:13px;min-width:0;}
+  .mark{
+    width:40px;height:40px;border-radius:12px;flex:none;
+    background:linear-gradient(140deg, var(--accent), rgba(var(--accent-glow),.55));
+    color:#03121a;display:grid;place-items:center;
+    box-shadow:0 0 0 1px rgba(var(--accent-glow),.35),
+               0 10px 30px -12px rgba(var(--accent-glow),.8);
+    position:relative;overflow:hidden;
+  }
+  .mark svg{position:relative;z-index:1;}
+  .mark::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.5) 50%,transparent 60%);
+    transform:translateX(-120%);animation:sheen 6s ease-in-out infinite;
+  }
+  @keyframes sheen{0%,72%{transform:translateX(-120%);}88%,100%{transform:translateX(120%);}}
+
+  .brandtext{min-width:0;}
+  .brandtext h1{
+    margin:0;font-size:17.5px;font-weight:650;letter-spacing:-.015em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .brandtext h1 .sep{color:var(--faint);font-weight:400;margin:0 8px;}
+  .brandtext h1 .light{color:var(--muted);font-weight:450;}
+  .brandtext p{
+    margin:3px 0 0;font-size:12px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62ch;
+  }
+
+  .controls{display:flex;align-items:center;gap:9px;}
+
+  button.ghost{
+    border:1px solid var(--border-strong);border-radius:10px;
+    background:var(--card);color:var(--ink-2);
+    padding:9px 12px;font:inherit;font-size:13px;cursor:pointer;
+    transition:border-color .18s ease, background .18s ease, color .18s ease;
+    display:grid;place-items:center;
+  }
+  button.ghost:hover{border-color:var(--accent);color:var(--accent);}
+  button.ghost:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  .back-btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:9px 16px;border-radius:10px;
+    background:var(--card);border:1px solid var(--border-strong);
+    color:var(--ink-2);font:inherit;font-size:13px;font-weight:600;
+    cursor:pointer;text-decoration:none;
+    transition:border-color .18s ease, color .18s ease, background .18s ease;
+  }
+  .back-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .back-btn svg{flex:none;}
+
+  /* ---------------- section headings ---------------- */
+  .sechead{
+    display:flex;align-items:baseline;justify-content:space-between;
+    margin:0 2px 12px;gap:16px;
+  }
+  .sechead h2{
+    margin:0;font-size:11px;font-weight:700;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);
+    display:flex;align-items:center;gap:10px;
+  }
+  .sechead h2::after{
+    content:"";height:1px;width:52px;
+    background:linear-gradient(90deg,var(--border-strong),transparent);
+  }
+  .sechead .note{font-size:12px;color:var(--muted);}
+
+  /* ---------------- feed card ---------------- */
+  .feed{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+
+  @keyframes slidein{
+    from{opacity:0;transform:translateY(-8px);}
+    to{opacity:1;transform:none;}
+  }
+
+  .sym{font-weight:660;font-size:14.5px;letter-spacing:-.01em;}
+  .subtle{
+    font-size:11.5px;color:var(--muted);margin-top:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .conf{font-size:14px;font-weight:660;font-variant-numeric:tabular-nums;}
+  .conf small{color:var(--faint);font-weight:500;}
+  .empty{padding:46px 20px;text-align:center;color:var(--muted);font-size:13px;}
+
+  .badge{
+    display:inline-flex;align-items:center;justify-content:center;
+    padding:4px 0;width:74px;border-radius:7px;
+    font-size:10px;font-weight:750;letter-spacing:.08em;
+  }
+  .badge.BUY{background:var(--green-soft);color:var(--green);}
+  .badge.WATCH{background:var(--amber-soft);color:var(--amber);}
+  .badge.AVOID{background:var(--red-soft);color:var(--red);}
+  .badge.UNAVAILABLE{background:var(--unavailable-soft);color:var(--faint);width:96px;}
+  .badge.APPLY{background:var(--green-soft);color:var(--green);}
+  .badge.NEUTRAL{background:var(--amber-soft);color:var(--amber);}
+  .badge.UNKNOWN{background:var(--unavailable-soft);color:var(--faint);}
+
+  /* ---------------- IPO desk ---------------- */
+  .ipo{
+    padding:14px 18px;border-top:1px solid var(--border);
+    animation:slidein .45s cubic-bezier(.2,.7,.3,1) both;
+    transition:background .2s ease;
+  }
+  .ipo:first-child{border-top:0;}
+  .ipo:hover{background:var(--card-low);}
+  .ipotop{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:9px;}
+  .ipotop .band{margin-left:auto;font-size:12.5px;font-weight:640;
+                font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .ipometa{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
+    gap:9px 14px;margin:9px 0 0;padding-top:9px;border-top:1px solid var(--border);
+  }
+  .ipometa .k{
+    font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);font-weight:700;
+  }
+  .ipometa .v{font-size:13px;font-weight:620;margin-top:2px;
+              font-variant-numeric:tabular-nums;}
+  .ipometa .v.dim{color:var(--faint);font-weight:450;}
+  .ipowhy{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin-top:9px;}
+  .ipoflag{
+    display:inline-block;margin-top:7px;margin-right:6px;font-size:10px;font-weight:700;
+    letter-spacing:.05em;padding:3px 8px;border-radius:6px;
+    color:var(--amber);background:var(--amber-soft);
+  }
+  .ipoflag.unofficial{color:var(--faint);background:var(--unavailable-soft);}
+  .ipoflag.ok{color:var(--green);background:var(--green-soft);}
+  .wchip{
+    font-size:9px;font-weight:750;letter-spacing:.09em;text-transform:uppercase;
+    padding:3px 8px;border-radius:5px;background:var(--unavailable-soft);color:var(--faint);
+  }
+  .wchip.open{background:var(--accent-soft);color:var(--accent);}
+
+  /* ---------------- loading shimmer ---------------- */
+  .loading{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:60px 20px;gap:16px;color:var(--muted);font-size:13px;
+  }
+  .spinner-ring{
+    width:28px;height:28px;border:2px solid var(--border-strong);
+    border-top-color:var(--accent);border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---------------- footer ---------------- */
+  footer{
+    margin-top:40px;padding:14px 2px 0;border-top:1px solid var(--border);
+    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    font-size:11px;color:var(--faint);
+  }
+
+  /* --- responsive ------------------------------------------------------- */
+  @media (max-width:560px){
+    .wrap{padding:18px 13px 44px;}
+    .sechead{flex-direction:column;align-items:flex-start;gap:3px;}
+    .sechead h2::after{display:none;}
+    header{flex-direction:column;align-items:flex-start;}
+    /* align-items:flex-start makes the column's children shrink-wrap, so the
+       brand block sized itself to its own nowrap text and pushed the page
+       74px wide at 320. Filling the row lets .brandtext{min-width:0} shrink
+       and the h1/p ellipsis actually engage. */
+    .brandline{width:100%;}
+    footer{flex-direction:column;gap:8px;}
+  }
+
+  @media (pointer:coarse){
+    button.ghost,.back-btn{min-height:44px;}
+  }
+</style>
+<script>
+  /* Theme: applied before first paint */
+  (function () {
+    try {
+      var t = localStorage.getItem("dalal.theme");
+      if (!t) {
+        t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      }
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+  })();
+</script>
+<!-- build_web.py: api base -->
+<script>
+  /* Generated by build_web.py — the backend this build points at.
+     Override per-visit with ?api=https://... */
+  window.__API_BASE__ = "https://example-backend.fly.dev";
+</script>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brandline">
+      <a href="/" class="back-btn" title="Back to dashboard">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+        </svg>
+        Dashboard
+      </a>
+      <div class="brandtext">
+        <h1>
+          <span id="brand">…</span>
+          <span class="sep">·</span><span class="light">IPO desk</span>
+        </h1>
+        <p>Open and upcoming IPOs on the NSE calendar</p>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="ghost" id="theme" title="Switch theme" aria-label="Switch theme">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path id="themeicon" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="sechead enter d1" id="ipohead">
+    <h2>IPO desk</h2>
+    <span class="note" id="iponote">loading…</span>
+  </div>
+  <div class="feed enter d2" id="ipofeed">
+    <div class="loading" id="ipoloading">
+      <div class="spinner-ring"></div>
+      Fetching IPO calendar from NSE…
+    </div>
+  </div>
+
+  <footer>
+    <span>Analysis only. No orders are ever placed. Not investment advice.</span>
+    <span>Data from NSE · unofficial figures are always labelled</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var el = function (id) { return document.getElementById(id); };
+  function text(node, value) {
+    if (node && node.textContent !== String(value)) { node.textContent = value; }
+  }
+  function esc(value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function pct(value) {
+    if (typeof value !== "number") { return "—"; }
+    return (value >= 0 ? "+" : "") + value.toFixed(2) + "%";
+  }
+
+  /* --- theme toggle ---------------------------------------------------- */
+  (function () {
+    var btn = el("theme"), icon = el("themeicon");
+    var SUN = "M12 17a5 5 0 100-10 5 5 0 000 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4"
+            + "M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4";
+    var MOON = "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z";
+    function paint() {
+      var dark = document.documentElement.getAttribute("data-theme") !== "light";
+      if (icon) { icon.setAttribute("d", dark ? MOON : SUN); }
+    }
+    paint();
+    if (btn) {
+      btn.addEventListener("click", function () {
+        var next = document.documentElement.getAttribute("data-theme") === "light"
+          ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", next);
+        try { localStorage.setItem("dalal.theme", next); } catch (e) { /* private mode */ }
+        paint();
+      });
+    }
+  })();
+
+  /* --- API base -------------------------------------------------------- */
+  var API = (function () {
+    function clean(u) { return u ? String(u).trim().replace(/\/+$/, "") : ""; }
+    try {
+      var params = new URLSearchParams(location.search);
+      var fromUrl = clean(params.get("api"));
+      if (fromUrl) { localStorage.setItem("dalal.api", fromUrl); return fromUrl; }
+      var saved = clean(localStorage.getItem("dalal.api"));
+      if (saved) { return saved; }
+    } catch (e) { /* private mode */ }
+    return clean(window.__API_BASE__);
+  })();
+
+  function api(path) { return API + path; }
+
+  /* --- fetch brand ----------------------------------------------------- */
+  fetch(api("/config")).then(function (r) { return r.json(); }).then(function (cfg) {
+    text(el("brand"), cfg.brand);
+    document.title = cfg.brand + " · IPO desk";
+  }).catch(function () {});
+
+  /* --- fetch and render IPOs ------------------------------------------- */
+  fetch(api("/ipos"))
+    .then(function (r) { return r.json(); })
+    .then(function (book) { renderIpos(book); })
+    .catch(function () {
+      el("ipofeed").innerHTML = '<div class="empty">Could not reach the IPO calendar — ' +
+        'the exchange feed may be down. Refresh to retry.</div>';
+      text(el("iponote"), "offline");
+    });
+
+  function renderIpos(book) {
+    var feed = el("ipofeed");
+    var rows = book && book.ipos ? book.ipos : [];
+    if (!book || !book.generated) {
+      feed.innerHTML = '<div class="empty">No IPO data available.</div>';
+      text(el("iponote"), "no data");
+      return;
+    }
+
+    var applies = rows.filter(function (r) { return r.verdict.verdict === "APPLY"; }).length;
+    text(el("iponote"), rows.length
+      ? rows.length + " live · " + book.open + " open · " + applies + " rated apply"
+      : "no open or upcoming issues on the exchange calendar");
+
+    if (!rows.length) {
+      feed.innerHTML = '<div class="empty">The NSE calendar currently lists no open ' +
+        'or upcoming IPOs.</div>';
+      return;
+    }
+
+    feed.innerHTML = rows.map(function (r) {
+      var v = r.verdict, f = r.financials || {}, g = r.gmp || {};
+      var sub = r.subscription ? r.subscription.total : null;
+
+      function cell(k, val, dim) {
+        return '<div><div class="k">' + esc(k) + '</div><div class="v' +
+               (dim ? ' dim' : '') + '">' + val + '</div></div>';
+      }
+      var meta = "";
+      meta += cell("Subscription", sub !== null && sub !== undefined
+        ? sub.toFixed(2) + "x" : "—", sub === null || sub === undefined);
+      meta += cell("Issue size", r.issue && r.issue.value_cr
+        ? "₹" + Number(r.issue.value_cr).toLocaleString("en-IN") + " Cr" : "—",
+        !(r.issue && r.issue.value_cr));
+      meta += cell("Closes", esc(r.closes || "—") +
+        (r.days_to_close !== null && r.days_to_close !== undefined && r.window === "open"
+          ? ' <span class="subtle">T-' + r.days_to_close + '</span>' : ''), !r.closes);
+      meta += cell("P/E post", f.pe_post_issue !== null && f.pe_post_issue !== undefined
+        ? f.pe_post_issue + "x" : "—", f.pe_post_issue === null || f.pe_post_issue === undefined);
+      meta += cell("Peer P/E", f.peer_pe !== null && f.peer_pe !== undefined
+        ? f.peer_pe + "x" : "—", f.peer_pe === null || f.peer_pe === undefined);
+      meta += cell("Profit", f.profit_cr !== null && f.profit_cr !== undefined
+        ? "₹" + Number(f.profit_cr).toLocaleString("en-IN") + " Cr" : "—",
+        f.profit_cr === null || f.profit_cr === undefined);
+
+      var flags = "";
+      (v.blockers || []).forEach(function (b) {
+        flags += '<span class="ipoflag">' + esc(b) + '</span>';
+      });
+      if (f.auto_read) {
+        flags += '<span class="ipoflag ok" title="' + esc(f.pe_basis || "") + '">' +
+                 'read from the offer document</span>';
+      }
+      if (f.unverified_dropped && f.unverified_dropped.length) {
+        flags += '<span class="ipoflag">⚠ ' + f.unverified_dropped.length +
+                 ' figure(s) dropped as unverifiable</span>';
+      }
+      if (g.premium_pct !== null && g.premium_pct !== undefined) {
+        flags += '<span class="ipoflag unofficial" title="' + esc(g.trust || "") +
+                 '">GMP ' + pct(g.premium_pct) + ' · unofficial</span>';
+      }
+
+      return '<div class="ipo">' +
+        '<div class="ipotop">' +
+          '<span class="badge ' + esc(v.verdict) + '">' + esc(v.verdict) + '</span>' +
+          '<span class="sym">' + esc(r.symbol) + '</span>' +
+          '<span class="wchip ' + esc(r.window) + '">' + esc(r.window) + '</span>' +
+          (v.confidence ? '<span class="conf">' + v.confidence + '<small>/10</small></span>' : '') +
+          '<span class="band">' + (r.price_band && r.price_band.low
+            ? "₹" + r.price_band.low + "–" + r.price_band.high : "—") + '</span>' +
+        '</div>' +
+        '<div class="subtle" style="white-space:normal">' + esc(r.name || "") + '</div>' +
+        '<div class="ipometa">' + meta + '</div>' +
+        '<div class="ipowhy">' + esc(v.rationale) + '</div>' +
+        flags +
+        '</div>';
+    }).join("");
+  }
+})();
+</script>
+</body>
+</html>

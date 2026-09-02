@@ -46,6 +46,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DB_DIR = os.environ.get("DB_DIR", "").strip() or HERE
 DB_PATH = os.path.join(DB_DIR, "signals.db")
 DASHBOARD = os.path.join(HERE, "dashboard.html")
+IPO_PAGE = os.path.join(HERE, "ipo_page.html")
 IST = timezone(timedelta(hours=5, minutes=30))
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
@@ -1246,6 +1247,12 @@ def _preflight(_any=None):
 @app.get("/")
 def index():
     with open(DASHBOARD, "r", encoding="utf-8") as fh:
+        return Response(fh.read(), mimetype="text/html")
+
+
+@app.get("/ipo-desk")
+def ipo_desk():
+    with open(IPO_PAGE, "r", encoding="utf-8") as fh:
         return Response(fh.read(), mimetype="text/html")
 
 
