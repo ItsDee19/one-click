@@ -42,6 +42,7 @@ import json
 import os
 import re
 import time
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -65,6 +66,7 @@ DOWNLOAD_TIMEOUT = 120
 MAX_PAGES_TO_MODEL = 6
 MAX_CHARS_TO_MODEL = 22000
 CACHE_DAYS = 30             # a filed DRHP does not change
+NEGATIVE_CACHE_DAYS = 1     # a miss may just be transient — see read_cache()
 
 
 def _now():
@@ -142,7 +144,11 @@ def find_document(company_name, symbol=None, rows=None, log=None):
                       ("drhpAttach", "DRHP")):
         for row in matches:
             url = str(row.get(key) or "").strip()
-            if url.lower().endswith(".pdf"):
+            low = url.lower()
+            # NSE sometimes bundles the offer document as a zip of the whole
+            # filing set rather than a single PDF — still usable, just needs
+            # unpacking first.
+            if low.endswith(".pdf") or low.endswith(".zip"):
                 return {"url": url, "kind": kind,
                         "company": row.get("company"),
                         "filed": row.get("drhpDate") or row.get("fpDate"),
@@ -193,8 +199,25 @@ def relevant_pages(reader, log=None):
     return sorted(chosen, key=lambda row: row[1])
 
 
+def _largest_pdf_in_zip(content):
+    """
+    NSE occasionally files the offer document as a zip of the whole filing
+    set — the DRHP itself plus annexures. The DRHP is reliably the largest
+    PDF in there; annexures (board resolutions, consents) run a few pages.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            pdf_names = [n for n in zf.namelist() if n.lower().endswith(".pdf")]
+            if not pdf_names:
+                return None
+            best = max(pdf_names, key=lambda n: zf.getinfo(n).file_size)
+            return zf.read(best)
+    except zipfile.BadZipFile:
+        return None
+
+
 def fetch_text(document, session=None, log=None):
-    """Download the PDF and return the text of its relevant pages."""
+    """Download the PDF (or zip containing one) and return the text of its relevant pages."""
     say = log or (lambda _m: None)
     s = session or _session()
 
@@ -208,12 +231,20 @@ def fetch_text(document, session=None, log=None):
     size_mb = len(response.content) / 1e6
     if size_mb > MAX_PDF_MB:
         return None, f"document is {size_mb:.0f} MB, over the {MAX_PDF_MB} MB limit"
-    if not response.content[:5].startswith(b"%PDF"):
-        return None, "the link did not return a PDF"
+
+    content = response.content
+    if content[:5].startswith(b"%PDF"):
+        pdf_bytes = content
+    elif content[:4] == b"PK\x03\x04":
+        pdf_bytes = _largest_pdf_in_zip(content)
+        if pdf_bytes is None:
+            return None, "the offer document is a zip with no readable PDF inside"
+    else:
+        return None, "the link did not return a PDF or zip"
 
     try:
         from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(response.content))
+        reader = PdfReader(io.BytesIO(pdf_bytes))
     except Exception as exc:                                       # noqa: BLE001
         return None, f"could not parse the PDF ({type(exc).__name__})"
 
@@ -226,7 +257,7 @@ def fetch_text(document, session=None, log=None):
         cleaned = re.sub(r"[ \t]+", " ", text)
         parts.append(f"--- page {index + 1} ---\n{cleaned}")
     joined = "\n\n".join(parts)[:MAX_CHARS_TO_MODEL]
-    say(f"DRHP: {size_mb:.1f} MB, {len(reader.pages)} pages, "
+    say(f"DRHP: {len(pdf_bytes) / 1e6:.1f} MB, {len(reader.pages)} pages, "
         f"{len(joined)} chars of financial text extracted")
     return joined, None
 
@@ -350,7 +381,16 @@ def _cache_path(symbol):
     return os.path.join(CACHE_DIR, f"{safe}.json")
 
 
-def read_cache(symbol, max_age_days=CACHE_DAYS):
+def read_cache(symbol):
+    """
+    A successful read is cached for CACHE_DAYS — a filed DRHP does not change.
+
+    A miss ("no document found", "could not parse it") gets a much shorter
+    NEGATIVE_CACHE_DAYS instead: it can be transient — a document not yet
+    attached on NSE's side, a flaky download, or (as happened during testing)
+    a pipeline limitation that gets fixed — and a 30-day cache would silently
+    outlive the reason it was written.
+    """
     path = _cache_path(symbol)
     if not os.path.exists(path):
         return None
@@ -360,7 +400,8 @@ def read_cache(symbol, max_age_days=CACHE_DAYS):
         fetched = datetime.fromisoformat(blob.get("fetched_at"))
     except Exception:                                              # noqa: BLE001
         return None
-    if (_now() - fetched).days > max_age_days:
+    ttl = CACHE_DAYS if blob.get("available") else NEGATIVE_CACHE_DAYS
+    if (_now() - fetched).days > ttl:
         return None
     return blob
 
