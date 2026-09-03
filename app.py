@@ -28,6 +28,7 @@ import data_sources
 import drhp
 import fundamentals
 import history
+import intraday_desk
 import ipo
 import llm
 import market
@@ -47,6 +48,7 @@ DB_DIR = os.environ.get("DB_DIR", "").strip() or HERE
 DB_PATH = os.path.join(DB_DIR, "signals.db")
 DASHBOARD = os.path.join(HERE, "dashboard.html")
 IPO_PAGE = os.path.join(HERE, "ipo_page.html")
+INTRADAY_PAGE = os.path.join(HERE, "intraday_page.html")
 IST = timezone(timedelta(hours=5, minutes=30))
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
@@ -1256,6 +1258,12 @@ def ipo_desk():
         return Response(fh.read(), mimetype="text/html")
 
 
+@app.get("/intraday-desk")
+def intraday_desk_page():
+    with open(INTRADAY_PAGE, "r", encoding="utf-8") as fh:
+        return Response(fh.read(), mimetype="text/html")
+
+
 @app.get("/config")
 def config():
     provider = llm.detect_provider()
@@ -1422,6 +1430,15 @@ def ipos_route():
                                    data_sources.score_headline, log=log, max_items=4)
         return jsonify(ipo.review(log=log, news_fn=_news,
                                   drhp_fn=_ipo_drhp_reader()))
+    except Exception as exc:                                       # noqa: BLE001
+        return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
+
+
+@app.get("/intraday")
+def intraday_route():
+    """Today's intraday setups, each from a named and separately measured rule."""
+    try:
+        return jsonify(intraday_desk.scan(log=log))
     except Exception as exc:                                       # noqa: BLE001
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 

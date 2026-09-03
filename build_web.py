@@ -38,6 +38,7 @@ MARKER = "<!-- build_web.py: api base -->"
 PAGES = [
     ("dashboard.html", "index.html"),
     ("ipo_page.html", "ipo-desk.html"),
+    ("intraday_page.html", "intraday-desk.html"),
 ]
 
 

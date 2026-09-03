@@ -1,0 +1,68 @@
+{
+ "generated": "03 Sep 2026, 09:35:36 IST",
+ "window": "60d of 5m bars",
+ "symbols": 164,
+ "stock_sessions": 9676,
+ "strategies": {
+  "ORB breakout": {
+   "trades": 1418,
+   "enough": true,
+   "win_rate_pct": 57.2,
+   "expectancy_r": 0.332,
+   "profit_factor": 2.14,
+   "avg_win_r": 1.09,
+   "avg_loss_r": -0.68,
+   "best_r": 2.0,
+   "worst_r": -1.0,
+   "note": null
+  },
+  "VWAP reclaim": {
+   "trades": 8455,
+   "enough": true,
+   "win_rate_pct": 36.3,
+   "expectancy_r": 0.001,
+   "profit_factor": 1.0,
+   "avg_win_r": 1.69,
+   "avg_loss_r": -0.96,
+   "best_r": 2.0,
+   "worst_r": -1.0,
+   "note": null
+  },
+  "RVOL momentum": {
+   "trades": 677,
+   "enough": true,
+   "win_rate_pct": 56.1,
+   "expectancy_r": 0.474,
+   "profit_factor": 2.23,
+   "avg_win_r": 1.53,
+   "avg_loss_r": -0.88,
+   "best_r": 2.0,
+   "worst_r": -1.0,
+   "note": null
+  },
+  "Gap and go": {
+   "trades": 327,
+   "enough": true,
+   "win_rate_pct": 44.6,
+   "expectancy_r": -0.028,
+   "profit_factor": 0.92,
+   "avg_win_r": 0.72,
+   "avg_loss_r": -0.63,
+   "best_r": 2.0,
+   "worst_r": -1.0,
+   "note": null
+  },
+  "VWAP reversion": {
+   "trades": 176,
+   "enough": true,
+   "win_rate_pct": 46.0,
+   "expectancy_r": -0.04,
+   "profit_factor": 0.8,
+   "avg_win_r": 0.34,
+   "avg_loss_r": -0.37,
+   "best_r": 0.67,
+   "worst_r": -1.0,
+   "note": null
+  }
+ }
+}
