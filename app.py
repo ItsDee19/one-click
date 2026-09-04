@@ -749,6 +749,24 @@ def _fired(rows, track=None):
     return out
 
 
+def active_universe(log=None):
+    """
+    The universe this run should look at.
+
+    FULL_EXCHANGE=1 screens every liquid EQ-series company the NSE lists,
+    which is slower but means the shortlist is not limited to names someone
+    picked in advance. Anything else uses the curated universe.json.
+    """
+    say = log or (lambda _m: None)
+    if env_str("FULL_EXCHANGE") in ("1", "true", "yes"):
+        universe = data_sources.load_full_exchange(log=say)
+    else:
+        universe = data_sources.load_universe()
+        say(f"universe.json: {data_sources.universe_size(universe)} tickers "
+            f"across {len(universe)} buckets")
+    return universe
+
+
 def run_cycle(mode, capital=None):
     threshold = env_int("CONFIDENCE_THRESHOLD", 7)
     shortlist_per_bucket = env_int("SHORTLIST_PER_BUCKET", 4)
@@ -808,9 +826,7 @@ def run_cycle(mode, capital=None):
         set_agent("scout", status="working")
         pace()
         if mode == "live":
-            universe = data_sources.load_universe()
-            log(f"universe.json: {data_sources.universe_size(universe)} tickers "
-                f"across {len(universe)} buckets")
+            universe = active_universe(log=log)
             universe_count, shortlist = data_sources.scan_live(
                 universe, shortlist_per_bucket, log=log)
         else:
@@ -846,8 +862,7 @@ def run_cycle(mode, capital=None):
                 log(f"IPO desk skipped ({type(exc).__name__}: {scrub(exc)})")
 
         try:
-            universe_for_screen = (data_sources.load_universe()
-                                   if mode == "live" else {})
+            universe_for_screen = (universe if mode == "live" else {})
             if universe_for_screen:
                 book = fundamentals.screen(universe_for_screen, log=log)
                 with LOCK:

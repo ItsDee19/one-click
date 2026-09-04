@@ -44,7 +44,9 @@ unknowable here, and the conservative reading is the honest one.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
+
+import trade_stats
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -374,38 +376,5 @@ def evaluate(s):
 # ---------------------------------------------------------------------------
 
 def summarise(trades):
-    """
-    Win rate and expectancy together — neither means much alone.
-
-    Expectancy is the average R per trade. Positive means the rule made money
-    per unit risked over this sample; a high win rate beside a negative
-    expectancy means the losses are bigger than the wins, which is the usual
-    shape of a strategy that markets well.
-    """
-    n = len(trades)
-    if not n:
-        return {"trades": 0, "enough": False,
-                "note": "no setups triggered in the sample"}
-
-    wins = [t for t in trades if t["r"] > 0]
-    rs = [t["r"] for t in trades]
-    expectancy = sum(rs) / n
-    gross_win = sum(r for r in rs if r > 0)
-    gross_loss = abs(sum(r for r in rs if r < 0))
-
-    enough = n >= MIN_TRADES_TO_REPORT
-    return {
-        "trades": n,
-        "enough": enough,
-        "win_rate_pct": round(len(wins) / n * 100.0, 1),
-        "expectancy_r": round(expectancy, 3),
-        "profit_factor": round(gross_win / gross_loss, 2) if gross_loss else None,
-        "avg_win_r": round(sum(r for r in rs if r > 0) / len(wins), 2) if wins else None,
-        "avg_loss_r": round(sum(r for r in rs if r < 0) / (n - len(wins)), 2)
-                      if n - len(wins) else None,
-        "best_r": round(max(rs), 2),
-        "worst_r": round(min(rs), 2),
-        "note": None if enough else
-                f"only {n} setups — below the {MIN_TRADES_TO_REPORT} needed "
-                f"before a hit rate means anything",
-    }
+    """This rule's record over a list of simulated intraday trades."""
+    return trade_stats.summarise(trades, MIN_TRADES_TO_REPORT, noun="setups")

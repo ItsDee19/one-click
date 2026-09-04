@@ -110,7 +110,6 @@ def entry_age_days(as_of):
 
 def quarterly_revenue(ticker, log=None) -> dict:
     """Latest quarterly revenue in crore, with the quarter it belongs to."""
-    say = log or (lambda _m: None)
     out = {"revenue_cr": None, "quarter": None, "prior_revenue_cr": None,
            "yoy_growth_pct": None, "reason": None}
 

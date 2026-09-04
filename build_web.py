@@ -26,8 +26,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import shutil
-import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "web")

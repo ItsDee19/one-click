@@ -22,8 +22,6 @@ Nothing here predicts anything. It only records what already happened.
 
 from __future__ import annotations
 
-import json
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
 IST = timezone(timedelta(hours=5, minutes=30))

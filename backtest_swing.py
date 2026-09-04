@@ -24,6 +24,7 @@ from collections import defaultdict
 
 import data_sources
 import swing_strategies
+import trade_stats
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_FILE = os.path.join(HERE, "backtest_swing.json")
@@ -119,28 +120,13 @@ def run(years=5, horizon=swing_strategies.DEFAULT_HORIZON, symbols=None, step=1,
 
 
 def _summarise(rows):
-    n = len(rows)
-    if not n:
-        return {"trades": 0, "enough": False,
-                "note": "no signals triggered in the sample"}
-    rs = [t["r"] for t in rows]
-    wins = [r for r in rs if r > 0]
-    losses = [r for r in rs if r < 0]
-    gross_win, gross_loss = sum(wins), abs(sum(losses))
-    enough = n >= swing_strategies.MIN_TRADES_TO_REPORT
-    return {
-        "trades": n,
-        "enough": enough,
-        "win_rate_pct": round(len(wins) / n * 100.0, 1),
-        "expectancy_r": round(sum(rs) / n, 3),
-        "profit_factor": round(gross_win / gross_loss, 2) if gross_loss else None,
-        "avg_days_held": round(sum(t["days_held"] for t in rows) / n, 1),
-        "best_r": round(max(rs), 2),
-        "worst_r": round(min(rs), 2),
-        "note": None if enough else
-                f"only {n} signals — below the "
-                f"{swing_strategies.MIN_TRADES_TO_REPORT} needed to mean anything",
-    }
+    """A swing rule's record, plus how long it tended to be held."""
+    def held(trades):
+        return {"avg_days_held": round(
+            sum(t["days_held"] for t in trades) / len(trades), 1)}
+
+    return trade_stats.summarise(rows, swing_strategies.MIN_TRADES_TO_REPORT,
+                                 noun="signals", extra=held)
 
 
 def report(blob, log=print):

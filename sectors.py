@@ -289,14 +289,3 @@ def heatmap(quotes, log=None) -> dict:
         "source": "NSE sector indices via the price feed + breadth computed "
                   "across the universe",
     }
-
-
-def sector_state(heat, sector):
-    """The state for one sector, for the evidence bundle."""
-    for row in (heat or {}).get("rows", []):
-        if row["sector"] == sector:
-            return {"state": row["state"], "index": row["index"],
-                    "index_change_pct": row["index_change_pct"],
-                    "advance_pct": row["advance_pct"],
-                    "median_move_pct": row["median_move_pct"]}
-    return None

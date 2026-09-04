@@ -543,17 +543,12 @@ def build_evidence_live(quote: dict, log=None) -> dict:
     volumes = _series_values(frame, "Volume")
 
     info = {}
-    news_items = []
     try:
         handle = yf.Ticker(ticker)
         try:
             info = handle.info or {}
         except Exception as exc:                                  # noqa: BLE001
             say(f"{symbol}: .info unavailable ({type(exc).__name__})")
-        try:
-            news_items = handle.news or []
-        except Exception as exc:                                  # noqa: BLE001
-            say(f"{symbol}: .news unavailable ({type(exc).__name__})")
         info_reco = _recommendation_split(handle, symbol, say)
     except Exception as exc:                                      # noqa: BLE001
         say(f"{symbol}: yfinance handle failed ({type(exc).__name__})")
@@ -988,43 +983,6 @@ def _events_block(info, _atr_pct=None) -> dict:
     out["next_earnings"] = when.strftime("%d %b %Y")
     out["days_to_earnings"] = days
     return out
-
-
-def _news_block(news_items) -> dict:
-    """Normalise yfinance news (old flat shape and new {'content': ...} shape)."""
-    recent, pos, neg, neu = [], 0, 0, 0
-
-    for item in (news_items or [])[:12]:
-        if not isinstance(item, dict):
-            continue
-        content = item.get("content") if isinstance(item.get("content"), dict) else item
-        title = content.get("title") or item.get("title")
-        if not title:
-            continue
-        publisher = (
-            (content.get("provider") or {}).get("displayName")
-            if isinstance(content.get("provider"), dict) else None
-        ) or item.get("publisher") or None
-        published = content.get("pubDate") or item.get("providerPublishTime") or None
-
-        tone = score_headline(title)
-        pos += tone == "positive"
-        neg += tone == "negative"
-        neu += tone == "neutral"
-        recent.append({
-            "title": title[:180],
-            "publisher": publisher,
-            "published": str(published) if published is not None else None,
-            "sentiment": tone,
-        })
-
-    if not recent:
-        return {"total": 0, "positive": 0, "negative": 0, "neutral": 0,
-                "net_tone": 0, "recent": []}
-    return {"total": len(recent), "positive": pos, "negative": neg,
-            "neutral": neu, "net_tone": pos - neg, "recent": recent[:6]}
-
-
 # --------------------------------------------------------------------------
 # public entry points used by app.py
 # --------------------------------------------------------------------------
