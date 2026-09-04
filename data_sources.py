@@ -760,6 +760,92 @@ def build_intraday(frame, prev_close, live, phase_info) -> dict:
     return out
 
 
+SWING_HISTORY_PERIOD = "2y"   # 52-week high and 12-1 momentum need a year+
+
+
+def fetch_swing_history(tickers, log=None):
+    """
+    Two years of daily bars for the shortlist.
+
+    The screener downloads one month, which is all it needs and all it should
+    pay for across the whole universe. The swing rules need a year before they
+    can compute a 52-week high at all, so without this they never fire in
+    production no matter how well they backtest — the rules and the data
+    simply never meet.
+    """
+    yf = _import_yf()
+    say = log or (lambda _m: None)
+    if not tickers:
+        return {}
+    say(f"downloading {SWING_HISTORY_PERIOD} daily OHLC for {len(tickers)} "
+        f"shortlisted (swing rules need a year of history)")
+    try:
+        downloaded = yf.download(
+            tickers=" ".join(tickers), period=SWING_HISTORY_PERIOD, interval="1d",
+            group_by="ticker", auto_adjust=False, actions=False,
+            progress=False, threads=True)
+    except Exception as exc:                                       # noqa: BLE001
+        say(f"swing history download failed ({type(exc).__name__}) — "
+            f"positional rules will stay silent this run")
+        return {}
+    single = len(tickers) == 1
+    return {t: _frame_for(downloaded, t, single) for t in tickers}
+
+
+def fired_strategies(quote) -> dict:
+    """
+    The named rules triggering on one stock: {"intraday": {...}, "swing": {...}}.
+
+    Kept separate from the scoring so the two can be reasoned about apart —
+    this only observes what fired, and strategy_edge decides what that is
+    worth based on how the rule has actually performed.
+    """
+    import strategies
+    import swing_strategies
+
+    out = {"intraday": {}, "swing": {}}
+
+    frame = quote.get("intraday_frame")
+    if frame is not None and not getattr(frame, "empty", True):
+        bars = [{"open": o, "high": h, "low": l, "close": c, "volume": v}
+                for o, h, l, c, v in zip(_series_values(frame, "Open"),
+                                         _series_values(frame, "High"),
+                                         _series_values(frame, "Low"),
+                                         _series_values(frame, "Close"),
+                                         _series_values(frame, "Volume"))]
+        daily = quote.get("frame")
+        prev_close = None
+        if daily is not None and not getattr(daily, "empty", True):
+            closes = _series_values(daily, "Close")
+            prev_close = closes[-2] if len(closes) >= 2 else None
+        s = strategies.session(bars, prev_close=prev_close, rvol=quote.get("rvol"))
+        if s:
+            for name, fn in strategies.STRATEGIES.items():
+                try:
+                    setup = fn(s)
+                except Exception:                                  # noqa: BLE001
+                    setup = None
+                if setup:
+                    out["intraday"][name] = setup["why"]
+
+    # the long frame when the shortlist paid for one, else the screener's month
+    # (which is too short for these rules and will simply return nothing)
+    daily = quote.get("history_frame")
+    if daily is None or getattr(daily, "empty", True):
+        daily = quote.get("frame")
+    if daily is not None and not getattr(daily, "empty", True):
+        try:
+            signals = swing_strategies.signals_now(
+                _series_values(daily, "High"), _series_values(daily, "Low"),
+                _series_values(daily, "Close"), _series_values(daily, "Volume"))
+        except Exception:                                          # noqa: BLE001
+            signals = {}
+        for name, sig in signals.items():
+            out["swing"][name] = sig["why"]
+
+    return out
+
+
 def fetch_intraday(tickers, log=None):
     """One batched 5-minute download for the shortlist. {ticker: frame}."""
     yf = _import_yf()
@@ -933,6 +1019,10 @@ def scan_live(universe: dict, shortlist_per_bucket: int, log=None):
     for quote in screened:
         quote["intraday_frame"] = frames.get(quote["ticker"])
 
+    history = fetch_swing_history([q["ticker"] for q in screened], log=say)
+    for quote in screened:
+        quote["history_frame"] = history.get(quote["ticker"])
+
     bundles = []
     for quote in screened:
         try:
@@ -947,6 +1037,10 @@ def scan_live(universe: dict, shortlist_per_bucket: int, log=None):
         if (bundle.get("price") or {}).get("live") is None:
             say(f"{quote['ticker']}: no price data returned — delisted or renamed? skipped")
             continue
+
+        # Which named rules fire on this stock right now. The debate weighs
+        # them by their measured record; here we only record what triggered.
+        bundle["strategies"] = fired_strategies(quote)
         bundles.append(bundle)
 
     return universe_size(universe), bundles

@@ -25,6 +25,7 @@ import strategies
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RECORD_FILE = os.path.join(HERE, "backtest_intraday.json")
+SWING_RECORD_FILE = os.path.join(HERE, "backtest_swing.json")
 
 MAX_PICKS = 12
 
@@ -33,6 +34,16 @@ def load_record():
     """The measured performance of each strategy, if the backtest has been run."""
     try:
         with open(RECORD_FILE, "r", encoding="utf-8") as fh:
+            blob = json.load(fh)
+    except (OSError, ValueError):
+        return {}, None
+    return blob.get("strategies") or {}, blob
+
+
+def load_swing_record():
+    """The positional rules' record, shown alongside so both horizons are visible."""
+    try:
+        with open(SWING_RECORD_FILE, "r", encoding="utf-8") as fh:
             blob = json.load(fh)
     except (OSError, ValueError):
         return {}, None
@@ -67,7 +78,8 @@ def scan(log=None, universe=None):
         return {"generated": data_sources.now_ist_str(), "picks": [],
                 "tradeable": False,
                 "note": f"not a trading day — {trading.get('reason', '')}".strip(" —"),
-                "strategies": record, "record_window": (blob or {}).get("window")}
+                "strategies": record, "record_window": (blob or {}).get("window"),
+                "swing": _swing_payload()}
 
     universe = universe or data_sources.load_universe()
     entries = [dict(e, bucket=b) for b, rows in universe.items() for e in rows]
@@ -146,6 +158,7 @@ def scan(log=None, universe=None):
         "strategies": record,
         "record_window": (blob or {}).get("window"),
         "record_sessions": (blob or {}).get("stock_sessions"),
+        "swing": _swing_payload(),
         "note": None if record else
                 "no measured record yet — run `python backtest_intraday.py` so "
                 "each strategy can show what it actually did on this universe",
@@ -181,3 +194,11 @@ def _bars_from(frame):
             "close": d.get("Close"), "volume": d.get("Volume"),
         })
     return out
+
+
+def _swing_payload():
+    """The swing scoreboard, so the page can show both horizons together."""
+    record, blob = load_swing_record()
+    return {"strategies": record,
+            "window": (blob or {}).get("window"),
+            "symbols": (blob or {}).get("symbols")}

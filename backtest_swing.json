@@ -1,0 +1,63 @@
+{
+ "generated": "03 Sep 2026, 14:58:26 IST",
+ "window": "5y of daily bars, 10-day horizon",
+ "symbols": 164,
+ "bars_tested": 155221,
+ "strategies": {
+  "52-week high": {
+   "trades": 32709,
+   "enough": true,
+   "win_rate_pct": 51.0,
+   "expectancy_r": 0.125,
+   "profit_factor": 1.34,
+   "avg_days_held": 8.2,
+   "best_r": 2.0,
+   "worst_r": -1.0,
+   "note": null
+  },
+  "12-1 momentum": {
+   "trades": 49899,
+   "enough": true,
+   "win_rate_pct": 53.7,
+   "expectancy_r": 0.116,
+   "profit_factor": 1.41,
+   "avg_days_held": 9.0,
+   "best_r": 2.0,
+   "worst_r": -1.0,
+   "note": null
+  },
+  "RSI(2) pullback": {
+   "trades": 25089,
+   "enough": true,
+   "win_rate_pct": 52.1,
+   "expectancy_r": 0.11,
+   "profit_factor": 1.32,
+   "avg_days_held": 8.0,
+   "best_r": 1.5,
+   "worst_r": -1.0,
+   "note": null
+  },
+  "Donchian 20": {
+   "trades": 9694,
+   "enough": true,
+   "win_rate_pct": 49.1,
+   "expectancy_r": 0.09,
+   "profit_factor": 1.23,
+   "avg_days_held": 8.0,
+   "best_r": 2.0,
+   "worst_r": -1.0,
+   "note": null
+  },
+  "Short-term reversal": {
+   "trades": 3003,
+   "enough": true,
+   "win_rate_pct": 53.5,
+   "expectancy_r": 0.105,
+   "profit_factor": 1.34,
+   "avg_days_held": 8.5,
+   "best_r": 1.5,
+   "worst_r": -1.0,
+   "note": null
+  }
+ }
+}

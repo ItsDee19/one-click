@@ -295,6 +295,14 @@
   </div>
 
   <div class="sechead enter d2">
+    <h2>Swing record · positional</h2>
+    <span class="note" id="swingnote">…</span>
+  </div>
+  <div class="feed enter d2" id="swingboard">
+    <div class="loading"><div class="spinner-ring"></div>Measuring…</div>
+  </div>
+
+  <div class="sechead enter d2">
     <h2>Today's setups</h2>
     <span class="note" id="picknote">…</span>
   </div>
@@ -382,7 +390,26 @@
 
   function render(book) {
     renderScoreboard(book);
+    renderSwing(book);
     renderPicks(book);
+  }
+
+  /* The positional rules, measured on years of daily bars rather than the
+     59 sessions intraday is limited to — so this table is the better
+     evidenced of the two, and worth reading first. */
+  function renderSwing(book) {
+    var swing = book.swing || {};
+    var recs = swing.strategies || {};
+    var box = el("swingboard");
+    if (!Object.keys(recs).length) {
+      box.innerHTML = '<div class="empty">No swing record yet — run ' +
+        'backtest_swing.py.</div>';
+      text(el("swingnote"), "not measured yet");
+      return;
+    }
+    text(el("swingnote"),
+      (swing.symbols ? swing.symbols + " symbols · " : "") + (swing.window || ""));
+    box.innerHTML = buildTable(recs, "days");
   }
 
   /* --- the measured record -------------------------------------------- */
@@ -428,8 +455,33 @@
         '</tr>';
     }).join("");
 
-    box.innerHTML =
-      '<div class="tablewrap"><table class="scoretable"><thead><tr>' +
+    box.innerHTML = buildTable(recs);
+  }
+
+  function buildTable(recs) {
+    var names = Object.keys(recs);
+    names.sort(function (a, b) {
+      return (recs[b].expectancy_r || -99) - (recs[a].expectancy_r || -99);
+    });
+    var rows = names.map(function (n) {
+      var s = recs[n] || {};
+      if (!s.trades) {
+        return '<tr><td class="name">' + esc(n) + '</td>' +
+               '<td class="num" colspan="4" style="color:var(--faint)">no signals in the sample</td></tr>';
+      }
+      var trusted = s.enough !== undefined ? s.enough : s.trusted;
+      var thin = trusted ? "" : '<span class="thin">thin</span>';
+      var exp = s.expectancy_r;
+      var cls = exp > 0.05 ? "pos" : (exp < -0.005 ? "neg" : "flat");
+      return '<tr>' +
+        '<td class="name">' + esc(n) + thin + '</td>' +
+        '<td class="num">' + s.trades.toLocaleString("en-IN") + '</td>' +
+        '<td class="num">' + num(s.win_rate_pct, 1) + '%</td>' +
+        '<td class="num ' + cls + '">' + (exp >= 0 ? "+" : "") + num(exp, 3) + 'R</td>' +
+        '<td class="num hide-sm">' + (s.profit_factor ? num(s.profit_factor, 2) : "—") + '</td>' +
+        '</tr>';
+    }).join("");
+    return '<div class="tablewrap"><table class="scoretable"><thead><tr>' +
         '<th>Strategy</th><th style="text-align:right">Trades</th>' +
         '<th style="text-align:right">Win rate</th>' +
         '<th style="text-align:right">Expectancy</th>' +

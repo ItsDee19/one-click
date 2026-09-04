@@ -71,6 +71,9 @@ class Setup(dict):
 
     def __init__(self, strategy, bar, entry, stop, target, direction, why):
         risk = abs(entry - stop) if entry is not None and stop is not None else None
+        # A short is analysis too: this project never places an order, and
+        # refusing to name a downside setup would just make the desk
+        # one-sided rather than safer.
         super().__init__(
             strategy=strategy, bar=bar, entry=round(entry, 2), stop=round(stop, 2),
             target=round(target, 2), direction=direction, why=why,
@@ -256,9 +259,58 @@ def momentum_rvol(s):
     return None
 
 
+def orb_breakdown(s):
+    """
+    The short mirror of the opening range breakout.
+
+    Every other rule here is long-only, which quietly assumes the market only
+    offers one direction. It does not, and a desk that can only see upside
+    setups will keep finding them in a falling market.
+    """
+    if s["or_width"] <= 0 or (s["rvol"] is not None and s["rvol"] < 1.2):
+        return None
+    for i in range(OPENING_RANGE_BARS, min(s["n"], LAST_ENTRY_BAR)):
+        if s["close"][i] < s["or_low"] and s["close"][i] < s["vwap"][i]:
+            entry = s["close"][i]
+            stop = s["or_high"]
+            if stop <= entry:
+                return None
+            return Setup("ORB breakdown", i, entry, stop, entry - 2 * (stop - entry),
+                         "short", f"closed below the 15-minute range low "
+                                  f"{s['or_low']:.2f} and below VWAP")
+    return None
+
+
+def vwap_rejection(s):
+    """
+    Price returns to VWAP from below and is turned away.
+
+    The failure to reclaim is the signal. A stock that cannot get back above
+    the level the day's volume was transacted at has sellers waiting there.
+    """
+    below = False
+    for i in range(OPENING_RANGE_BARS, min(s["n"], LAST_ENTRY_BAR)):
+        vw = s["vwap"][i]
+        if s["close"][i] < vw:
+            if below and s["high"][i] >= vw and s["close"][i] < s["open"][i]:
+                entry = s["close"][i]
+                stop = max(s["high"][max(0, i - 3):i + 1])
+                if stop <= entry:
+                    return None
+                return Setup("VWAP rejection", i, entry, stop,
+                             entry - 2 * (stop - entry), "short",
+                             f"tagged VWAP {vw:.2f} from below and was rejected")
+            below = True
+        else:
+            below = False
+    return None
+
+
 STRATEGIES = {
     "ORB breakout": orb_breakout,
+    "ORB breakdown": orb_breakdown,
     "VWAP reclaim": vwap_reclaim,
+    "VWAP rejection": vwap_rejection,
     "Gap and go": gap_and_go,
     "RVOL momentum": momentum_rvol,
     "VWAP reversion": vwap_reversion,
@@ -276,24 +328,28 @@ def simulate(setup, s):
     A bar that spans both stop and target is scored a loss: at 5-minute
     granularity the path inside the bar is unknowable, and assuming the
     favourable ordering is how backtests come to flatter their authors.
+
+    Shorts are the mirror image — stop above, target below — so the sign of
+    the move is folded into `side` rather than duplicated in every rule.
     """
     entry, stop, target = setup["entry"], setup["stop"], setup["target"]
-    risk = entry - stop
+    side = 1 if setup["direction"] == "long" else -1
+    risk = (entry - stop) * side
     if risk <= 0:
         return None
 
     for i in range(setup["bar"] + 1, s["n"]):
-        hit_stop = s["low"][i] <= stop
-        hit_target = s["high"][i] >= target
+        hit_stop = s["low"][i] <= stop if side > 0 else s["high"][i] >= stop
+        hit_target = s["high"][i] >= target if side > 0 else s["low"][i] <= target
         if hit_stop:                                  # checked first, deliberately
             return {"outcome": "stop", "r": -1.0, "bars_held": i - setup["bar"]}
         if hit_target:
             return {"outcome": "target",
-                    "r": round((target - entry) / risk, 3),
+                    "r": round((target - entry) * side / risk, 3),
                     "bars_held": i - setup["bar"]}
 
     close = s["close"][-1]
-    return {"outcome": "close", "r": round((close - entry) / risk, 3),
+    return {"outcome": "close", "r": round((close - entry) * side / risk, 3),
             "bars_held": s["n"] - 1 - setup["bar"]}
 
 

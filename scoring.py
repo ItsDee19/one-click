@@ -26,6 +26,8 @@ it will work.
 
 from __future__ import annotations
 
+import strategy_edge
+
 ENGINE_NAME = "deterministic"
 
 AGENT_KEYS = ("bull", "bear", "fundamentals", "technicals", "news")
@@ -264,6 +266,28 @@ def _bear_case(ev) -> _Tally:
 # --------------------------------------------------------------------------
 # intraday seats
 # --------------------------------------------------------------------------
+
+def _strategy_seats(ev, t_bull, t_bear, kind):
+    """
+    Let the named strategies that fired argue their own case.
+
+    The weight each one carries is its measured expectancy on this universe,
+    so a rule earns influence by having worked here rather than by being
+    well known. See strategy_edge for the caps and the evidence bar.
+    """
+    fired = (ev.get("strategies") or {}).get(kind) or {}
+    if not fired:
+        return
+    result = (strategy_edge.intraday_edge(fired) if kind == "intraday"
+              else strategy_edge.swing_edge(fired))
+    for reason in result["for_reasons"]:
+        t_bull.add(result["for_points"] / max(1, len(result["for_reasons"])), reason)
+    for reason in result["against_reasons"]:
+        t_bear.add(result["against_points"] / max(1, len(result["against_reasons"])),
+                   reason)
+    for name in result["untrusted"]:
+        t_bull.note(f"{name} triggered but has too thin a measured record to count")
+
 
 def _intraday_bull(ev) -> _Tally:
     t = _Tally()
@@ -805,6 +829,12 @@ def evaluate(evidence: dict) -> dict:
     bear = _bear_case(evidence)
     ib = _intraday_bull(evidence)
     ibear = _intraday_bear(evidence)
+
+    # The named strategies get a seat in both debates, weighted by what they
+    # actually returned on this universe. With no measured record on disk this
+    # is a no-op and the engine behaves exactly as it did before.
+    _strategy_seats(evidence, ib, ibear, "intraday")
+    _strategy_seats(evidence, bull, bear, "swing")
 
     scores = {
         "bull": {"score": bull.score(), "reasons": bull.reasons},
