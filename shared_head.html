@@ -1,0 +1,14 @@
+<script>
+  /* Applied before first paint, so the page never flashes the wrong theme.
+     This has to stay inline in <head>: an external file would be fetched
+     after the first paint and the flash is exactly what it prevents. */
+  (function () {
+    try {
+      var t = localStorage.getItem("dalal.theme");
+      if (!t) {
+        t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      }
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+  })();
+</script>

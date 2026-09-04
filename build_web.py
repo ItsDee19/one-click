@@ -27,6 +27,8 @@ import argparse
 import os
 import re
 
+import page_render
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "web")
 MARKER = "<!-- build_web.py: api base -->"
@@ -42,8 +44,9 @@ PAGES = [
 
 
 def build_page(source: str, out_name: str, api_base: str) -> str:
-    with open(os.path.join(HERE, source), "r", encoding="utf-8") as fh:
-        html = fh.read()
+    # the shared head/JS are inlined here exactly as Flask inlines them, so
+    # the served page and the built page cannot drift apart
+    html = page_render.render_file(os.path.join(HERE, source))
 
     # JSON-escape so a stray quote in the URL cannot break out of the string
     literal = api_base.replace("\\", "\\\\").replace('"', '\\"')

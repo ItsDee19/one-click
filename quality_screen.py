@@ -53,6 +53,7 @@ from datetime import datetime, timedelta, timezone
 IST = timezone(timedelta(hours=5, minutes=30))
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE_FILE = os.path.join(HERE, "quality_screen.json")
+PROGRESS_FILE = os.path.join(HERE, ".quality_screen_progress.json")
 CACHE_HOURS = 20                      # statements change quarterly, not hourly
 
 NSE_LIST_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -389,6 +390,8 @@ def run(criteria=None, limit=None, log=None, force=False):
     say = log or (lambda _m: None)
     criteria = {**DEFAULTS, **(criteria or {})}
 
+    if force:
+        _clear_progress()
     if not force:
         cached = read_cache(criteria)
         if cached:
@@ -403,21 +406,41 @@ def run(criteria=None, limit=None, log=None, force=False):
     if limit:
         listed = listed[:limit]
 
-    survivors = _liquidity_stage(listed, say)
+    # The liquidity scan is a dozen batched downloads over the whole exchange.
+    # Recomputing it on every resume would make an interrupted run more
+    # expensive to restart than to finish, so its result is checkpointed too.
+    survivors = _resume_survivors(criteria, say)
+    if survivors is None:
+        survivors = _liquidity_stage(listed, say)
+        _save_survivors(criteria, survivors)
     say(f"quality screen: {len(survivors)} of {len(listed)} worth a fundamentals call")
 
-    matches, examined, errors = [], 0, 0
-    for entry in survivors:
+    # A full exchange screen is several hours of API calls and will be
+    # interrupted sooner or later — a closed laptop, a dropped connection, a
+    # process killed by whatever is supervising it. Progress is written as it
+    # goes and picked up on the next run, so an interruption costs the current
+    # company rather than the whole night.
+    done, matches, errors = _load_progress(criteria, say)
+    examined = len(done)
+    remaining = [e for e in survivors if e["symbol"] not in done]
+    if examined:
+        say(f"resuming: {examined} already examined, {len(remaining)} to go")
+
+    for position, entry in enumerate(remaining, start=1):
         row = evaluate(entry["ticker"], entry["name"], entry["symbol"], criteria)
+        done.add(entry["symbol"])
         examined += 1
         if row.get("error"):
             errors += 1
-            continue
-        if row["clears"]:
+        elif row["clears"]:
             matches.append(row)
             say(f"  * {row['symbol']} clears all {row['criteria']} criteria")
-        if examined % 50 == 0:
-            say(f"  ...{examined}/{len(survivors)} examined, {len(matches)} clearing")
+        if position % 10 == 0:
+            _save_progress(criteria, done, matches, errors)
+            say(f"  ...{examined}/{len(survivors)} examined, "
+                f"{len(matches)} clearing (progress saved)")
+
+    _save_progress(criteria, done, matches, errors)
 
     matches.sort(key=lambda r: ((r["checks"]["piotroski"]["value"] or 0),
                                 (r["checks"]["altman_z"]["value"] or 0)), reverse=True)
@@ -445,7 +468,67 @@ def run(criteria=None, limit=None, log=None, force=False):
         ],
     }
     write_cache(blob)
+    _clear_progress()
     return blob
+
+
+def _load_progress(criteria, say):
+    """What a previous interrupted run already established, if anything."""
+    try:
+        with open(PROGRESS_FILE, "r", encoding="utf-8") as fh:
+            blob = json.load(fh)
+    except (OSError, ValueError):
+        return set(), [], 0
+    if blob.get("criteria") != criteria:
+        say("previous progress was for a different screen — starting fresh")
+        return set(), [], 0
+    return set(blob.get("done") or []), blob.get("matches") or [], blob.get("errors", 0)
+
+
+def _save_progress(criteria, done, matches, errors):
+    blob = _read_progress() or {}
+    blob.update({"criteria": criteria, "done": sorted(done),
+                 "matches": matches, "errors": errors})
+    _write_progress(blob)
+
+
+def _read_progress():
+    try:
+        with open(PROGRESS_FILE, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def _write_progress(blob):
+    try:
+        with open(PROGRESS_FILE, "w", encoding="utf-8") as fh:
+            json.dump(blob, fh)
+    except OSError:
+        pass
+
+
+def _resume_survivors(criteria, say):
+    """The survivor list a previous run already paid for, if it matches."""
+    blob = _read_progress() or {}
+    if blob.get("criteria") != criteria or not blob.get("survivors"):
+        return None
+    say(f"reusing the liquidity scan from an earlier run "
+        f"({len(blob['survivors'])} survivors)")
+    return blob["survivors"]
+
+
+def _save_survivors(criteria, survivors):
+    blob = _read_progress() or {}
+    blob.update({"criteria": criteria, "survivors": survivors})
+    _write_progress(blob)
+
+
+def _clear_progress():
+    try:
+        os.remove(PROGRESS_FILE)
+    except OSError:
+        pass
 
 
 def _liquidity_stage(listed, say):

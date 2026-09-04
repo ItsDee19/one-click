@@ -32,6 +32,7 @@ import intraday_desk
 import ipo
 import llm
 import market
+import page_render
 import portfolio
 import quality_screen
 import research
@@ -767,6 +768,305 @@ def active_universe(log=None):
     return universe
 
 
+def _run_side_desks(mode, universe):
+    """
+    Sector heatmap, IPO desk and the book-to-sales screen.
+
+    None of these depend on the shortlist; they read the exchange or data the
+    scan already fetched. Each is wrapped separately so one failing feed
+    cannot take down the run.
+    """
+    # Sector heatmap + book-to-sales screen. Both run off data the scan
+    # already fetched, so they cost one extra request between them.
+    if mode == "live":
+        try:
+            heat = sectors.heatmap(data_sources.LAST_QUOTES, log=log)
+            with LOCK:
+                STATE["sector_heat"] = heat
+        except Exception as exc:                               # noqa: BLE001
+            log(f"sector heatmap skipped ({type(exc).__name__})")
+
+    # The IPO desk is independent of the stock universe: it reads the
+    # exchange's own calendar. It runs in live mode only, since the demo
+    # bundles have no IPO equivalent.
+    if mode == "live":
+        try:
+            def _ipo_news(symbol, name):
+                if env_str("WEB_RESEARCH", "1") in ("0", "false", "no"):
+                    return None
+                return research.gather(symbol, name + " IPO",
+                                       data_sources.score_headline, log=log,
+                                       max_items=4)
+            book = ipo.review(log=log, news_fn=_ipo_news,
+                              drhp_fn=_ipo_drhp_reader())
+            with LOCK:
+                STATE["ipos"] = book
+        except Exception as exc:                               # noqa: BLE001
+            log(f"IPO desk skipped ({type(exc).__name__}: {scrub(exc)})")
+
+    try:
+        universe_for_screen = (universe if mode == "live" else {})
+        if universe_for_screen:
+            book = fundamentals.screen(universe_for_screen, log=log)
+            with LOCK:
+                STATE["orderbook"] = book
+    except Exception as exc:                                   # noqa: BLE001
+        log(f"book-to-sales screen skipped ({type(exc).__name__}: {scrub(exc)})")
+
+
+def _run_technician(shortlist):
+    """Read the charts already in the bundles and report average RVOL."""
+    # ---- Technician ---------------------------------------------------
+    set_agent("technician", status="working")
+    rvols = []
+    for index, bundle in enumerate(shortlist, start=1):
+        rvol = (bundle.get("technicals") or {}).get("rvol")
+        if rvol is not None:
+            rvols.append(rvol)
+        avg = _avg(rvols)
+        set_agent("technician", stat1=index,
+                  stat2=f"{avg:.2f}x" if avg is not None else "n/a")
+        pace(0.12)
+    set_agent("technician", status="done")
+    log(f"technician read {len(shortlist)} charts · "
+        f"{len(shortlist) - len(rvols)} without usable RVOL")
+    pace()
+
+
+def _run_fundamentalist(shortlist):
+    """Analyst coverage and average upside, where the feed carries one."""
+    # ---- Fundamentalist -----------------------------------------------
+    set_agent("fundamentalist", status="working")
+    upsides, covered = [], 0
+    for bundle in shortlist:
+        upside = (bundle.get("analyst") or {}).get("upside_pct")
+        if upside is not None:
+            upsides.append(upside)
+            covered += 1
+        avg = _avg(upsides)
+        set_agent("fundamentalist", stat1=covered,
+                  stat2=f"{avg:+.1f}%" if avg is not None else "n/a")
+        pace(0.12)
+    set_agent("fundamentalist", status="done")
+    log(f"fundamentalist covered {covered}/{len(shortlist)} with analyst targets "
+        f"(feed carries no P/E or ROE — target-based view only)")
+    pace()
+
+
+def _run_newsdesk(shortlist):
+    """Pull public RSS into each bundle and score the tone."""
+    # ---- Newsdesk ------------------------------------------------------
+    set_agent("newsdesk", status="working")
+    headlines, tone = 0, 0
+    web_on = env_str("WEB_RESEARCH", "1") not in ("0", "false", "no")
+
+    if web_on:
+        # Public RSS, sanitised. Everything fetched is treated as data:
+        # research.gather strips instruction-like text and flags it.
+        stripped = 0
+        for bundle in shortlist:
+            try:
+                web = research.gather(bundle["symbol"], bundle.get("name") or bundle["symbol"],
+                                      data_sources.score_headline, log=log)
+                bundle["news"] = research.merge_into_news(bundle.get("news") or {}, web)
+                bundle["web_research"] = {
+                    "source": web["source"], "trust": web["trust"],
+                    "fetched_at": web["fetched_at"], "added": bundle["news"].get("web_added", 0),
+                }
+                stripped += web.get("injection_attempts_stripped", 0)
+            except Exception as exc:                           # noqa: BLE001
+                log(f"research: {bundle['symbol']} skipped ({type(exc).__name__})")
+        log(f"newsdesk pulled public RSS for {len(shortlist)} names"
+            + (f" — {stripped} instruction-like pattern(s) stripped" if stripped else ""))
+
+    for bundle in shortlist:
+        news = bundle.get("news") or {}
+        headlines += int(news.get("total") or 0)
+        tone += int(news.get("net_tone") or 0)
+        set_agent("newsdesk", stat1=headlines, stat2=f"{tone:+d}")
+        pace(0.12)
+    set_agent("newsdesk", status="done")
+    log(f"newsdesk scored {headlines} headlines · net tone {tone:+d}")
+    pace()
+
+
+def _run_debate(shortlist, provider, board_line, calib_line, engine_label):
+    """
+    One LLM call per stock, a few at a time, returning (bundle, result) pairs
+    in the shortlist's own order.
+    """
+    set_agent("bull", status="working")
+
+    # One LLM call per stock, run a few at a time. Sequentially this is
+    # ~1-2 minutes a stock and a live shortlist of twelve would keep the
+    # board waiting for half an hour; the CLI spawns its own process per
+    # call, so a small pool cuts the wall time without straining anything.
+    workers = max(1, min(env_int("LLM_CONCURRENCY", 3), len(shortlist)))
+    done_count = 0
+    indexed = {}
+
+    log(f"debating {len(shortlist)} stocks, {workers} at a time")
+    with futures.ThreadPoolExecutor(max_workers=workers,
+                                    thread_name_prefix="debate") as pool:
+        pending = {}
+        for position, bundle in enumerate(shortlist):
+            try:
+                with db() as conn:
+                    recall = history.memory_for(conn, bundle.get("symbol"))
+            except Exception:                                  # noqa: BLE001
+                recall = {}
+            pending[pool.submit(llm.evaluate, bundle, provider=provider,
+                                log=log, memory=recall,
+                                scoreboard_line=board_line,
+                                calibration_line=calib_line)] = position
+        for future in futures.as_completed(pending):
+            position = pending[future]
+            bundle = shortlist[position]
+            try:
+                result = future.result()
+            except Exception as exc:                          # noqa: BLE001
+                log(f"{bundle.get('symbol')}: debate crashed "
+                    f"({type(exc).__name__}) — using the rule engine")
+                result = scoring.evaluate(bundle)
+                result["fallback_reason"] = f"{type(exc).__name__}: {exc}"
+
+            indexed[position] = (bundle, result)
+            done_count += 1
+
+            if result.get("fallback_reason") and result.get("engine") == scoring.ENGINE_NAME:
+                with LOCK:
+                    if not str(STATE["engine"]).startswith(scoring.ENGINE_NAME):
+                        STATE["engine"] = f"{engine_label} + rule fallback"
+            avg = _avg([r["scores"]["bull"]["score"] for _b, r in indexed.values()])
+            set_agent("bull", stat1=done_count,
+                      stat2=f"{avg:.0f}" if avg is not None else "n/a")
+
+    # restore the shortlist's own order so the board reads predictably
+    results = [indexed[position] for position in sorted(indexed)]
+    set_agent("bull", status="done")
+    log(f"bull argued {len(results)} cases")
+    pace()
+    return results
+
+
+def _run_bear(results):
+    """The bear seat. The case was argued in the same call as the bull's."""
+    set_agent("bear", status="working")
+    for index, (_bundle, result) in enumerate(results, start=1):
+        avg = _avg([r["scores"]["bear"]["score"] for _b, r in results[:index]])
+        set_agent("bear", stat1=index, stat2=f"{avg:.0f}" if avg is not None else "n/a")
+        pace(0.12)
+    set_agent("bear", status="done")
+    log(f"bear argued {len(results)} cases")
+    pace()
+
+
+def _run_judge(results, threshold, run_id, limits, mode):
+    """Turn each debate into a verdict row, size it, and record it."""
+    set_agent("judge", status="working")
+    rows, buys = [], 0
+    for index, (bundle, result) in enumerate(results, start=1):
+        row = _verdict_row(bundle, result, threshold)
+        rows.append(row)
+        buys = sum(1 for t in row["tracks"].values() if t.get("verdict") == "BUY") + buys
+
+        with LOCK:
+            STATE["verdicts"].insert(0, _public_verdict(row))
+        verdict_ids = db_save_verdict(run_id, row)
+
+        # What this signal means for today's amount. Computed for every
+        # fired signal regardless of mode, because "how much" is the
+        # question a verdict on its own never answers.
+        for name, track in row["tracks"].items():
+            if not track.get("fired"):
+                continue
+            levels = track.get("levels") or {}
+            track["sizing"] = portfolio.size_position(
+                limits, row.get("price"), levels.get("invalidation"),
+                cash_available=limits.deployable)
+
+        # A fired signal becomes a simulated position, subject to every
+        # risk gate. No real order is placed — see portfolio.py.
+        if paper_enabled(mode):
+            for name, track in row["tracks"].items():
+                if not track.get("fired"):
+                    continue
+                try:
+                    with db() as conn:
+                        outcome = portfolio.open_paper_position(
+                            conn, limits, run_id, verdict_ids.get(name),
+                            row, name, track, log=log)
+                    track["paper"] = outcome
+                except Exception as exc:                       # noqa: BLE001
+                    log(f"paper: {row['symbol']} sizing failed "
+                        f"({type(exc).__name__}: {scrub(exc)})")
+
+        set_agent("judge", stat1=index, stat2=buys)
+        set_kpi(buy_signals=len(_fired(rows)),
+                intraday_signals=len(_fired(rows, "intraday")),
+                positional_signals=len(_fired(rows, "positional")),
+                top_pick=_top_pick(rows))
+
+        for name, track in row["tracks"].items():
+            extra = (f" hold {track.get('horizon')}" if name == "positional"
+                     else f" ({track.get('horizon')})")
+            log(f"judge · {row['symbol']} [{name}]: {track.get('verdict')} "
+                f"{track.get('confidence') or '—'}/10 —{extra} {track.get('rationale')}")
+        pace(0.25)
+    set_agent("judge", status="done")
+    pace()
+    return rows
+
+
+def _run_messenger(rows, mode, engine_label, universe_count):
+    """Deliver the fired signals and the daily summary. Returns (fired, sent, errors)."""
+    # ---- Messenger ------------------------------------------------------
+    set_agent("messenger", status="working", stat2=engine_label)
+    fired = _fired(rows)
+    phase_label = rows[0].get("market_phase") if rows else None
+
+    cluster = concentration(fired)
+    if cluster:
+        log(f"concentration: {cluster}")
+    with LOCK:
+        STATE["concentration"] = cluster
+    sent, errors = 0, []
+
+    if not telegram_configured():
+        errors.append("Telegram not configured — set TELEGRAM_BOT_TOKEN and "
+                      "TELEGRAM_CHAT_ID in .env")
+        log(errors[-1])
+    else:
+        for row, track_name, track in fired:
+            ok, err = send_telegram(buy_message(row, track_name, track))
+            if ok:
+                sent += 1
+                log(f"telegram: {track_name} BUY sent for {row['symbol']}")
+            else:
+                errors.append(err)
+                log(f"telegram: failed for {row['symbol']} [{track_name}] — {err}")
+            set_agent("messenger", stat1=sent)
+            pace(0.2)
+
+        ok, err = send_telegram(
+            summary_message(rows, mode, engine_label, universe_count, phase_label))
+        if ok:
+            sent += 1
+            log("telegram: daily summary sent")
+        else:
+            errors.append(err)
+            log(f"telegram: summary failed — {err}")
+
+    set_agent("messenger", status="done", stat1=sent, stat2=engine_label)
+    with LOCK:
+        STATE["telegram"] = {
+            "configured": telegram_configured(),
+            "sent": sent,
+            "error": scrub(errors[0]) if errors else None,
+        }
+    return fired, sent, errors
+
+
 def run_cycle(mode, capital=None):
     threshold = env_int("CONFIDENCE_THRESHOLD", 7)
     shortlist_per_bucket = env_int("SHORTLIST_PER_BUCKET", 4)
@@ -833,42 +1133,7 @@ def run_cycle(mode, capital=None):
             bundles, shortlist = data_sources.scan_demo(shortlist_per_bucket, log=log)
             universe_count = len(bundles)
 
-        # Sector heatmap + book-to-sales screen. Both run off data the scan
-        # already fetched, so they cost one extra request between them.
-        if mode == "live":
-            try:
-                heat = sectors.heatmap(data_sources.LAST_QUOTES, log=log)
-                with LOCK:
-                    STATE["sector_heat"] = heat
-            except Exception as exc:                               # noqa: BLE001
-                log(f"sector heatmap skipped ({type(exc).__name__})")
-
-        # The IPO desk is independent of the stock universe: it reads the
-        # exchange's own calendar. It runs in live mode only, since the demo
-        # bundles have no IPO equivalent.
-        if mode == "live":
-            try:
-                def _ipo_news(symbol, name):
-                    if env_str("WEB_RESEARCH", "1") in ("0", "false", "no"):
-                        return None
-                    return research.gather(symbol, name + " IPO",
-                                           data_sources.score_headline, log=log,
-                                           max_items=4)
-                book = ipo.review(log=log, news_fn=_ipo_news,
-                                  drhp_fn=_ipo_drhp_reader())
-                with LOCK:
-                    STATE["ipos"] = book
-            except Exception as exc:                               # noqa: BLE001
-                log(f"IPO desk skipped ({type(exc).__name__}: {scrub(exc)})")
-
-        try:
-            universe_for_screen = (universe if mode == "live" else {})
-            if universe_for_screen:
-                book = fundamentals.screen(universe_for_screen, log=log)
-                with LOCK:
-                    STATE["orderbook"] = book
-        except Exception as exc:                                   # noqa: BLE001
-            log(f"book-to-sales screen skipped ({type(exc).__name__}: {scrub(exc)})")
+        _run_side_desks(mode, universe if mode == "live" else {})
 
         if not shortlist:
             raise RuntimeError(
@@ -886,235 +1151,21 @@ def run_cycle(mode, capital=None):
             + ", ".join(b["symbol"] for b in shortlist))
         pace()
 
-        # ---- Technician ---------------------------------------------------
-        set_agent("technician", status="working")
-        rvols = []
-        for index, bundle in enumerate(shortlist, start=1):
-            rvol = (bundle.get("technicals") or {}).get("rvol")
-            if rvol is not None:
-                rvols.append(rvol)
-            avg = _avg(rvols)
-            set_agent("technician", stat1=index,
-                      stat2=f"{avg:.2f}x" if avg is not None else "n/a")
-            pace(0.12)
-        set_agent("technician", status="done")
-        log(f"technician read {len(shortlist)} charts · "
-            f"{len(shortlist) - len(rvols)} without usable RVOL")
-        pace()
-
-        # ---- Fundamentalist -----------------------------------------------
-        set_agent("fundamentalist", status="working")
-        upsides, covered = [], 0
-        for bundle in shortlist:
-            upside = (bundle.get("analyst") or {}).get("upside_pct")
-            if upside is not None:
-                upsides.append(upside)
-                covered += 1
-            avg = _avg(upsides)
-            set_agent("fundamentalist", stat1=covered,
-                      stat2=f"{avg:+.1f}%" if avg is not None else "n/a")
-            pace(0.12)
-        set_agent("fundamentalist", status="done")
-        log(f"fundamentalist covered {covered}/{len(shortlist)} with analyst targets "
-            f"(feed carries no P/E or ROE — target-based view only)")
-        pace()
-
-        # ---- Newsdesk ------------------------------------------------------
-        set_agent("newsdesk", status="working")
-        headlines, tone = 0, 0
-        web_on = env_str("WEB_RESEARCH", "1") not in ("0", "false", "no")
-
-        if web_on:
-            # Public RSS, sanitised. Everything fetched is treated as data:
-            # research.gather strips instruction-like text and flags it.
-            stripped = 0
-            for bundle in shortlist:
-                try:
-                    web = research.gather(bundle["symbol"], bundle.get("name") or bundle["symbol"],
-                                          data_sources.score_headline, log=log)
-                    bundle["news"] = research.merge_into_news(bundle.get("news") or {}, web)
-                    bundle["web_research"] = {
-                        "source": web["source"], "trust": web["trust"],
-                        "fetched_at": web["fetched_at"], "added": bundle["news"].get("web_added", 0),
-                    }
-                    stripped += web.get("injection_attempts_stripped", 0)
-                except Exception as exc:                           # noqa: BLE001
-                    log(f"research: {bundle['symbol']} skipped ({type(exc).__name__})")
-            log(f"newsdesk pulled public RSS for {len(shortlist)} names"
-                + (f" — {stripped} instruction-like pattern(s) stripped" if stripped else ""))
-
-        for bundle in shortlist:
-            news = bundle.get("news") or {}
-            headlines += int(news.get("total") or 0)
-            tone += int(news.get("net_tone") or 0)
-            set_agent("newsdesk", stat1=headlines, stat2=f"{tone:+d}")
-            pace(0.12)
-        set_agent("newsdesk", status="done")
-        log(f"newsdesk scored {headlines} headlines · net tone {tone:+d}")
-        pace()
+        _run_technician(shortlist)
+        _run_fundamentalist(shortlist)
+        _run_newsdesk(shortlist)
 
         # ---- Bull / Bear / Judge -------------------------------------------
         # One combined debate call per stock produces all three seats at once;
         # the panel is then revealed in pipeline order so the board reads like
         # a real hand-off.
-        set_agent("bull", status="working")
+        results = _run_debate(shortlist, provider, board_line, calib_line,
+                              engine_label)
+        _run_bear(results)
+        rows = _run_judge(results, threshold, run_id, limits, mode)
 
-        # One LLM call per stock, run a few at a time. Sequentially this is
-        # ~1-2 minutes a stock and a live shortlist of twelve would keep the
-        # board waiting for half an hour; the CLI spawns its own process per
-        # call, so a small pool cuts the wall time without straining anything.
-        workers = max(1, min(env_int("LLM_CONCURRENCY", 3), len(shortlist)))
-        done_count = 0
-        indexed = {}
-
-        log(f"debating {len(shortlist)} stocks, {workers} at a time")
-        with futures.ThreadPoolExecutor(max_workers=workers,
-                                        thread_name_prefix="debate") as pool:
-            pending = {}
-            for position, bundle in enumerate(shortlist):
-                try:
-                    with db() as conn:
-                        recall = history.memory_for(conn, bundle.get("symbol"))
-                except Exception:                                  # noqa: BLE001
-                    recall = {}
-                pending[pool.submit(llm.evaluate, bundle, provider=provider,
-                                    log=log, memory=recall,
-                                    scoreboard_line=board_line,
-                                    calibration_line=calib_line)] = position
-            for future in futures.as_completed(pending):
-                position = pending[future]
-                bundle = shortlist[position]
-                try:
-                    result = future.result()
-                except Exception as exc:                          # noqa: BLE001
-                    log(f"{bundle.get('symbol')}: debate crashed "
-                        f"({type(exc).__name__}) — using the rule engine")
-                    result = scoring.evaluate(bundle)
-                    result["fallback_reason"] = f"{type(exc).__name__}: {exc}"
-
-                indexed[position] = (bundle, result)
-                done_count += 1
-
-                if result.get("fallback_reason") and result.get("engine") == scoring.ENGINE_NAME:
-                    with LOCK:
-                        if not str(STATE["engine"]).startswith(scoring.ENGINE_NAME):
-                            STATE["engine"] = f"{engine_label} + rule fallback"
-                avg = _avg([r["scores"]["bull"]["score"] for _b, r in indexed.values()])
-                set_agent("bull", stat1=done_count,
-                          stat2=f"{avg:.0f}" if avg is not None else "n/a")
-
-        # restore the shortlist's own order so the board reads predictably
-        results = [indexed[position] for position in sorted(indexed)]
-        set_agent("bull", status="done")
-        log(f"bull argued {len(results)} cases")
-        pace()
-
-        set_agent("bear", status="working")
-        for index, (_bundle, result) in enumerate(results, start=1):
-            avg = _avg([r["scores"]["bear"]["score"] for _b, r in results[:index]])
-            set_agent("bear", stat1=index, stat2=f"{avg:.0f}" if avg is not None else "n/a")
-            pace(0.12)
-        set_agent("bear", status="done")
-        log(f"bear argued {len(results)} cases")
-        pace()
-
-        set_agent("judge", status="working")
-        rows, buys = [], 0
-        for index, (bundle, result) in enumerate(results, start=1):
-            row = _verdict_row(bundle, result, threshold)
-            rows.append(row)
-            buys = sum(1 for t in row["tracks"].values() if t.get("verdict") == "BUY") + buys
-
-            with LOCK:
-                STATE["verdicts"].insert(0, _public_verdict(row))
-            verdict_ids = db_save_verdict(run_id, row)
-
-            # What this signal means for today's amount. Computed for every
-            # fired signal regardless of mode, because "how much" is the
-            # question a verdict on its own never answers.
-            for name, track in row["tracks"].items():
-                if not track.get("fired"):
-                    continue
-                levels = track.get("levels") or {}
-                track["sizing"] = portfolio.size_position(
-                    limits, row.get("price"), levels.get("invalidation"),
-                    cash_available=limits.deployable)
-
-            # A fired signal becomes a simulated position, subject to every
-            # risk gate. No real order is placed — see portfolio.py.
-            if paper_enabled(mode):
-                for name, track in row["tracks"].items():
-                    if not track.get("fired"):
-                        continue
-                    try:
-                        with db() as conn:
-                            outcome = portfolio.open_paper_position(
-                                conn, limits, run_id, verdict_ids.get(name),
-                                row, name, track, log=log)
-                        track["paper"] = outcome
-                    except Exception as exc:                       # noqa: BLE001
-                        log(f"paper: {row['symbol']} sizing failed "
-                            f"({type(exc).__name__}: {scrub(exc)})")
-
-            set_agent("judge", stat1=index, stat2=buys)
-            set_kpi(buy_signals=len(_fired(rows)),
-                    intraday_signals=len(_fired(rows, "intraday")),
-                    positional_signals=len(_fired(rows, "positional")),
-                    top_pick=_top_pick(rows))
-
-            for name, track in row["tracks"].items():
-                extra = (f" hold {track.get('horizon')}" if name == "positional"
-                         else f" ({track.get('horizon')})")
-                log(f"judge · {row['symbol']} [{name}]: {track.get('verdict')} "
-                    f"{track.get('confidence') or '—'}/10 —{extra} {track.get('rationale')}")
-            pace(0.25)
-        set_agent("judge", status="done")
-        pace()
-
-        # ---- Messenger ------------------------------------------------------
-        set_agent("messenger", status="working", stat2=engine_label)
-        fired = _fired(rows)
-        phase_label = rows[0].get("market_phase") if rows else None
-
-        cluster = concentration(fired)
-        if cluster:
-            log(f"concentration: {cluster}")
-        with LOCK:
-            STATE["concentration"] = cluster
-        sent, errors = 0, []
-
-        if not telegram_configured():
-            errors.append("Telegram not configured — set TELEGRAM_BOT_TOKEN and "
-                          "TELEGRAM_CHAT_ID in .env")
-            log(errors[-1])
-        else:
-            for row, track_name, track in fired:
-                ok, err = send_telegram(buy_message(row, track_name, track))
-                if ok:
-                    sent += 1
-                    log(f"telegram: {track_name} BUY sent for {row['symbol']}")
-                else:
-                    errors.append(err)
-                    log(f"telegram: failed for {row['symbol']} [{track_name}] — {err}")
-                set_agent("messenger", stat1=sent)
-                pace(0.2)
-
-            ok, err = send_telegram(
-                summary_message(rows, mode, engine_label, universe_count, phase_label))
-            if ok:
-                sent += 1
-                log("telegram: daily summary sent")
-            else:
-                errors.append(err)
-                log(f"telegram: summary failed — {err}")
-
-        set_agent("messenger", status="done", stat1=sent, stat2=engine_label)
-        with LOCK:
-            STATE["telegram"] = {
-                "configured": telegram_configured(),
-                "sent": sent,
-                "error": scrub(errors[0]) if errors else None,
-            }
+        fired, sent, errors = _run_messenger(
+            rows, mode, engine_label, universe_count)
 
         # ---- close out -------------------------------------------------------
         if paper_enabled(mode):
@@ -1265,26 +1316,22 @@ def _preflight(_any=None):
 
 @app.get("/")
 def index():
-    with open(DASHBOARD, "r", encoding="utf-8") as fh:
-        return Response(fh.read(), mimetype="text/html")
+    return Response(page_render.render_file(DASHBOARD), mimetype="text/html")
 
 
 @app.get("/ipo-desk")
 def ipo_desk():
-    with open(IPO_PAGE, "r", encoding="utf-8") as fh:
-        return Response(fh.read(), mimetype="text/html")
+    return Response(page_render.render_file(IPO_PAGE), mimetype="text/html")
 
 
 @app.get("/intraday-desk")
 def intraday_desk_page():
-    with open(INTRADAY_PAGE, "r", encoding="utf-8") as fh:
-        return Response(fh.read(), mimetype="text/html")
+    return Response(page_render.render_file(INTRADAY_PAGE), mimetype="text/html")
 
 
 @app.get("/quality-desk")
 def quality_desk_page():
-    with open(QUALITY_PAGE, "r", encoding="utf-8") as fh:
-        return Response(fh.read(), mimetype="text/html")
+    return Response(page_render.render_file(QUALITY_PAGE), mimetype="text/html")
 
 
 @app.get("/config")

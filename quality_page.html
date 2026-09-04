@@ -188,15 +188,7 @@
   }
   @media (pointer:coarse){ button.ghost,.back-btn{min-height:44px;} }
 </style>
-<script>
-  (function () {
-    try {
-      var t = localStorage.getItem("dalal.theme");
-      if (!t) { t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
-      document.documentElement.setAttribute("data-theme", t);
-    } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
-  })();
-</script>
+<!-- shared:head -->
 </head>
 <body>
 <div class="wrap">
@@ -247,16 +239,11 @@
   </footer>
 </div>
 
+<!-- shared:js -->
 <script>
 (function () {
   "use strict";
-  var el = function (id) { return document.getElementById(id); };
   function text(n, v) { if (n && n.textContent !== String(v)) { n.textContent = v; } }
-  function esc(v) {
-    return String(v === null || v === undefined ? "" : v)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
   function num(v, d) { return typeof v === "number" ? v.toFixed(d === undefined ? 2 : d) : "—"; }
   function cr(v) {
     if (typeof v !== "number") { return "—"; }
@@ -264,38 +251,7 @@
     return "₹" + Math.round(v).toLocaleString("en-IN") + " Cr";
   }
 
-  (function () {
-    var btn = el("theme"), icon = el("themeicon");
-    var SUN = "M12 17a5 5 0 100-10 5 5 0 000 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4"
-            + "M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4";
-    var MOON = "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z";
-    function paint() {
-      var dark = document.documentElement.getAttribute("data-theme") !== "light";
-      if (icon) { icon.setAttribute("d", dark ? MOON : SUN); }
-    }
-    paint();
-    if (btn) {
-      btn.addEventListener("click", function () {
-        var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
-        document.documentElement.setAttribute("data-theme", next);
-        try { localStorage.setItem("dalal.theme", next); } catch (e) {}
-        paint();
-      });
-    }
-  })();
 
-  var API = (function () {
-    function clean(u) { return u ? String(u).trim().replace(/\/+$/, "") : ""; }
-    try {
-      var p = new URLSearchParams(location.search);
-      var fromUrl = clean(p.get("api"));
-      if (fromUrl) { localStorage.setItem("dalal.api", fromUrl); return fromUrl; }
-      var saved = clean(localStorage.getItem("dalal.api"));
-      if (saved) { return saved; }
-    } catch (e) {}
-    return clean(window.__API_BASE__);
-  })();
-  function api(path) { return API + path; }
 
   fetch(api("/config")).then(function (r) { return r.json(); }).then(function (cfg) {
     text(el("brand"), cfg.brand);
