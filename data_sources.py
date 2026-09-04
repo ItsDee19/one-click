@@ -110,6 +110,66 @@ def now_ist_str() -> str:
     return datetime.now(IST).strftime("%d %b %Y, %H:%M:%S IST")
 
 
+def load_full_exchange(log=None) -> dict:
+    """
+    Every EQ-series company the NSE lists, bucketed by traded value.
+
+    universe.json is a curated 164 names; this is the whole exchange, for when
+    the panel should look at everything rather than at a list someone chose.
+    Buckets are assigned from turnover rather than a market-cap lookup,
+    because that costs one batched download instead of 2,500 separate calls
+    and is what the shortlist actually cares about.
+
+    BSE is not included: its list endpoint currently answers 404, and
+    BSE-only names are overwhelmingly too illiquid to trade. Saying so is
+    better than implying coverage that is not there.
+    """
+    import quality_screen
+    say = log or (lambda _m: None)
+
+    listed = quality_screen.fetch_nse_list(log=say)
+    if not listed:
+        say("full-exchange list unavailable — falling back to universe.json")
+        return load_universe()
+
+    yf = _import_yf()
+    scored = []
+    chunk = 200
+    for start in range(0, len(listed), chunk):
+        batch = listed[start:start + chunk]
+        try:
+            data = yf.download(" ".join(e["ticker"] for e in batch), period="1mo",
+                               interval="1d", group_by="ticker", auto_adjust=False,
+                               actions=False, progress=False, threads=True)
+        except Exception:                                          # noqa: BLE001
+            continue
+        for entry in batch:
+            try:
+                frame = data[entry["ticker"]] if len(batch) > 1 else data
+                closes = [c for c in frame["Close"].tolist() if c == c]
+                volumes = [v for v in frame["Volume"].tolist() if v == v]
+            except Exception:                                      # noqa: BLE001
+                continue
+            if not closes or not volumes:
+                continue
+            turnover_cr = closes[-1] * (sum(volumes) / len(volumes)) / 1e7
+            if turnover_cr >= 1.0:      # a crore a day, or it cannot be traded
+                scored.append((turnover_cr, entry))
+        say(f"  exchange scan: {min(start + chunk, len(listed))}/{len(listed)}, "
+            f"{len(scored)} liquid enough to consider")
+
+    scored.sort(key=lambda row: row[0], reverse=True)
+    third = max(1, len(scored) // 3)
+    universe = {"large": [], "mid": [], "small": []}
+    for index, (_turnover, entry) in enumerate(scored):
+        bucket = "large" if index < third else "mid" if index < 2 * third else "small"
+        universe[bucket].append({"ticker": entry["ticker"], "name": entry["name"],
+                                 "sector": None})
+    say(f"full exchange: {len(scored)} tradeable names "
+        f"({len(universe['large'])}/{len(universe['mid'])}/{len(universe['small'])})")
+    return universe
+
+
 def load_universe(path: str = UNIVERSE_FILE) -> dict:
     """Read universe.json -> {"large": [ {ticker,name,sector}, ... ], ...}."""
     with open(path, "r", encoding="utf-8") as fh:

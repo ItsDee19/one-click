@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quality screen · Indian stock analysis</title>
+<style>
+  :root,
+  [data-theme="dark"]{
+    --bg:#080b12; --bg-elev:#0a0e16; --card:#0e1219; --card-low:#0b0f16;
+    --card-high:#141924; --border:#1b2130; --border-strong:#28303f;
+    --ink:#e9eef8; --ink-2:#aab6cc; --muted:#8896ae; --faint:#78859c;
+    --accent:#4cc9f0; --accent-soft:#0c2230; --accent-glow:76,201,240;
+    --green:#3ddc97; --green-soft:#0d2a1f; --amber:#f5b544; --amber-soft:#2b2110;
+    --red:#ff6b6b; --red-soft:#2c1417; --unavailable-soft:#161b24;
+    --grid:rgba(255,255,255,.022);
+    --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -28px rgba(0,0,0,.9);
+    --radius:14px;
+  }
+  [data-theme="light"]{
+    --bg:#f5f6f8; --bg-elev:#ffffff; --card:#ffffff; --card-low:#fcfcfd;
+    --card-high:#fafbfc; --border:#e5e7ec; --border-strong:#d6d9e0;
+    --ink:#111520; --ink-2:#3d4451; --muted:#5d6573; --faint:#646c7b;
+    --accent:#2b62ee; --accent-soft:#eef3ff; --accent-glow:43,98,238;
+    --green:#0f7a4d; --green-soft:#e9f6ef; --amber:#94620a; --amber-soft:#fdf3e0;
+    --red:#b02a20; --red-soft:#fdeeec; --unavailable-soft:#f0f1f4;
+    --grid:rgba(17,21,32,.025);
+    --shadow:0 1px 2px rgba(17,21,32,.05), 0 10px 28px -22px rgba(17,21,32,.45);
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{
+      animation-duration:.001ms !important;animation-iteration-count:1 !important;
+      transition-duration:.001ms !important;scroll-behavior:auto !important;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background-color:var(--bg); color:var(--ink);
+    font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:56px 56px, 56px 56px;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:26px 24px 72px;position:relative;}
+  body::before{
+    content:"";position:fixed;inset:0 0 auto 0;height:340px;pointer-events:none;
+    background:radial-gradient(60% 100% at 50% 0%, rgba(var(--accent-glow),.07), transparent 70%);
+    z-index:0;
+  }
+  .wrap > *{position:relative;z-index:1;}
+  ::selection{background:rgba(var(--accent-glow),.28);}
+
+  @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+  .enter{animation:rise .5s cubic-bezier(.2,.7,.3,1) both;}
+  .d1{animation-delay:.04s;} .d2{animation-delay:.09s;} .d3{animation-delay:.14s;}
+
+  header{
+    display:flex;align-items:center;justify-content:space-between;gap:24px;
+    flex-wrap:wrap;margin-bottom:22px;
+  }
+  .brandline{display:flex;align-items:center;gap:13px;min-width:0;}
+  .brandtext{min-width:0;}
+  .brandtext h1{
+    margin:0;font-size:17.5px;font-weight:650;letter-spacing:-.015em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .brandtext h1 .sep{color:var(--faint);font-weight:400;margin:0 8px;}
+  .brandtext h1 .light{color:var(--muted);font-weight:450;}
+  .brandtext p{
+    margin:3px 0 0;font-size:12px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62ch;
+  }
+  .controls{display:flex;align-items:center;gap:9px;}
+  button.ghost{
+    border:1px solid var(--border-strong);border-radius:10px;
+    background:var(--card);color:var(--ink-2);
+    padding:9px 12px;font:inherit;font-size:13px;cursor:pointer;
+    transition:border-color .18s ease, background .18s ease, color .18s ease;
+    display:grid;place-items:center;
+  }
+  button.ghost:hover{border-color:var(--accent);color:var(--accent);}
+  button.ghost:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .back-btn{
+    display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:10px;
+    background:var(--card);border:1px solid var(--border-strong);
+    color:var(--ink-2);font:inherit;font-size:13px;font-weight:600;
+    cursor:pointer;text-decoration:none;white-space:nowrap;
+    transition:border-color .18s ease, color .18s ease, background .18s ease;
+  }
+  .back-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .back-btn svg{flex:none;}
+
+  .sechead{
+    display:flex;align-items:baseline;justify-content:space-between;
+    margin:0 2px 12px;gap:16px;
+  }
+  .sechead h2{
+    margin:0;font-size:11px;font-weight:700;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);
+    display:flex;align-items:center;gap:10px;
+  }
+  .sechead h2::after{
+    content:"";height:1px;width:52px;
+    background:linear-gradient(90deg,var(--border-strong),transparent);
+  }
+  .sechead .note{font-size:12px;color:var(--muted);}
+
+  .feed{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden;margin-bottom:26px;
+  }
+  .empty{padding:46px 22px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6;}
+
+  /* the criteria strip */
+  .criteria{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:1px;background:var(--border);border:1px solid var(--border);
+    border-radius:var(--radius);overflow:hidden;margin-bottom:22px;
+  }
+  .crit{background:var(--card);padding:11px 14px;}
+  .crit .k{
+    font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);font-weight:700;
+  }
+  .crit .v{font-size:13px;font-weight:640;margin-top:3px;font-variant-numeric:tabular-nums;}
+  .crit .sub{font-size:10px;color:var(--amber);margin-top:2px;}
+
+  .caveats{
+    border:1px solid var(--border);border-left:3px solid var(--amber);
+    background:var(--card);border-radius:10px;padding:14px 16px;margin-bottom:22px;
+    font-size:12.5px;color:var(--ink-2);line-height:1.6;
+  }
+  .caveats b{color:var(--ink);}
+  .caveats ul{margin:8px 0 0;padding-left:18px;}
+  .caveats li{margin-bottom:5px;}
+
+  /* a match */
+  .co{padding:15px 18px;border-top:1px solid var(--border);transition:background .2s ease;}
+  .co:first-child{border-top:0;}
+  .co:hover{background:var(--card-low);}
+  .cotop{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:3px;}
+  .sym{font-weight:660;font-size:14.5px;letter-spacing:-.01em;}
+  .sector{
+    font-size:9px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;
+    padding:3px 8px;border-radius:5px;background:var(--accent-soft);color:var(--accent);
+  }
+  .px{margin-left:auto;font-size:12.5px;font-weight:640;font-variant-numeric:tabular-nums;}
+  .subtle{font-size:11.5px;color:var(--muted);}
+  .metrics{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(102px,1fr));
+    gap:9px 14px;margin:11px 0 0;padding-top:11px;border-top:1px solid var(--border);
+  }
+  .metrics .k{
+    font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);font-weight:700;
+  }
+  .metrics .v{font-size:13px;font-weight:620;margin-top:2px;font-variant-numeric:tabular-nums;}
+  .ok{color:var(--green);}
+  .window{font-size:10.5px;color:var(--amber);margin-top:9px;}
+
+  footer{
+    margin-top:40px;padding:14px 2px 0;border-top:1px solid var(--border);
+    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    font-size:11px;color:var(--faint);
+  }
+
+  .loading{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:60px 20px;gap:16px;color:var(--muted);font-size:13px;
+  }
+  .spinner-ring{
+    width:28px;height:28px;border:2px solid var(--border-strong);
+    border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  @media (max-width:560px){
+    .wrap{padding:18px 13px 44px;}
+    .sechead{flex-direction:column;align-items:flex-start;gap:3px;}
+    .sechead h2::after{display:none;}
+    header{flex-direction:column;align-items:flex-start;}
+    .brandline{width:100%;}
+    .px{margin-left:0;width:100%;}
+    footer{flex-direction:column;gap:8px;}
+  }
+  @media (pointer:coarse){ button.ghost,.back-btn{min-height:44px;} }
+</style>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("dalal.theme");
+      if (!t) { t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+  })();
+</script>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brandline">
+      <a href="/" class="back-btn" title="Back to dashboard">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+        </svg>
+        Dashboard
+      </a>
+      <div class="brandtext">
+        <h1><span id="brand">…</span><span class="sep">·</span><span class="light">Quality screen</span></h1>
+        <p>Compounders: strong balance sheet, growing, promoter-owned</p>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="ghost" id="theme" title="Switch theme" aria-label="Switch theme">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path id="themeicon" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="sechead enter d1">
+    <h2>The screen</h2>
+    <span class="note" id="scannote">…</span>
+  </div>
+  <div class="criteria enter d1" id="criteria"></div>
+
+  <div class="caveats enter d1" id="caveats"></div>
+
+  <div class="sechead enter d2">
+    <h2>Companies clearing every criterion</h2>
+    <span class="note" id="matchnote">…</span>
+  </div>
+  <div class="feed enter d2" id="matches">
+    <div class="loading"><div class="spinner-ring"></div>Loading the screen…</div>
+  </div>
+
+  <footer>
+    <span>Analysis only. No orders are ever placed. Not investment advice.</span>
+    <span>Scores computed from filed statements · every gap is named</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var el = function (id) { return document.getElementById(id); };
+  function text(n, v) { if (n && n.textContent !== String(v)) { n.textContent = v; } }
+  function esc(v) {
+    return String(v === null || v === undefined ? "" : v)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function num(v, d) { return typeof v === "number" ? v.toFixed(d === undefined ? 2 : d) : "—"; }
+  function cr(v) {
+    if (typeof v !== "number") { return "—"; }
+    if (v >= 100000) { return "₹" + (v / 100000).toFixed(2) + " L Cr"; }
+    return "₹" + Math.round(v).toLocaleString("en-IN") + " Cr";
+  }
+
+  (function () {
+    var btn = el("theme"), icon = el("themeicon");
+    var SUN = "M12 17a5 5 0 100-10 5 5 0 000 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4"
+            + "M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4";
+    var MOON = "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z";
+    function paint() {
+      var dark = document.documentElement.getAttribute("data-theme") !== "light";
+      if (icon) { icon.setAttribute("d", dark ? MOON : SUN); }
+    }
+    paint();
+    if (btn) {
+      btn.addEventListener("click", function () {
+        var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", next);
+        try { localStorage.setItem("dalal.theme", next); } catch (e) {}
+        paint();
+      });
+    }
+  })();
+
+  var API = (function () {
+    function clean(u) { return u ? String(u).trim().replace(/\/+$/, "") : ""; }
+    try {
+      var p = new URLSearchParams(location.search);
+      var fromUrl = clean(p.get("api"));
+      if (fromUrl) { localStorage.setItem("dalal.api", fromUrl); return fromUrl; }
+      var saved = clean(localStorage.getItem("dalal.api"));
+      if (saved) { return saved; }
+    } catch (e) {}
+    return clean(window.__API_BASE__);
+  })();
+  function api(path) { return API + path; }
+
+  fetch(api("/config")).then(function (r) { return r.json(); }).then(function (cfg) {
+    text(el("brand"), cfg.brand);
+    document.title = cfg.brand + " · Quality screen";
+  }).catch(function () {});
+
+  fetch(api("/quality"))
+    .then(function (r) { return r.json(); })
+    .then(render)
+    .catch(function () {
+      el("matches").innerHTML = '<div class="empty">Could not reach the backend.</div>';
+      text(el("matchnote"), "offline");
+    });
+
+  var LABELS = {
+    altman_z: ["Altman Z", ">"], piotroski: ["Piotroski F", ">"],
+    market_cap_cr: ["Market cap", "> ₹", " Cr"], operating_margin: ["Operating margin", "> ", "%"],
+    sales_growth: ["Sales growth", "> ", "%"], profit_growth: ["Profit growth", "> ", "%"],
+    debt_to_equity: ["Debt / equity", "< "], promoter_holding: ["Promoter holding", "> ", "%"]
+  };
+
+  function render(book) {
+    var c = book.criteria || {};
+    var order = [
+      ["altman_z", c.altman_z_min], ["piotroski", c.piotroski_min],
+      ["market_cap_cr", c.market_cap_cr_min], ["operating_margin", c.operating_margin_min],
+      ["sales_growth", c.sales_growth_min], ["profit_growth", c.profit_growth_min],
+      ["debt_to_equity", c.debt_to_equity_max], ["promoter_holding", c.promoter_holding_min]
+    ];
+    el("criteria").innerHTML = order.map(function (pair) {
+      var L = LABELS[pair[0]] || [pair[0], ""];
+      var sub = "";
+      if (pair[0] === "sales_growth" || pair[0] === "profit_growth") {
+        sub = '<div class="sub">asked 10y · see note</div>';
+      } else if (pair[0] === "promoter_holding") {
+        sub = '<div class="sub">estimated</div>';
+      }
+      return '<div class="crit"><div class="k">' + esc(L[0]) + '</div>' +
+             '<div class="v">' + esc(L[1]) + esc(pair[1]) + esc(L[2] || "") + '</div>' +
+             sub + '</div>';
+    }).join("");
+
+    text(el("scannote"), book.examined
+      ? book.examined.toLocaleString("en-IN") + " examined of " +
+        (book.listed || 0).toLocaleString("en-IN") + " listed · " + (book.generated || "")
+      : (book.note ? "not run yet" : ""));
+
+    var cav = book.caveats || [];
+    el("caveats").innerHTML = cav.length
+      ? '<b>What this screen can and cannot answer.</b><ul>' +
+        cav.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join("") + '</ul>'
+      : '<b>Note.</b> No screen has been run yet.';
+
+    var matches = book.matches || [];
+    if (book.note && !matches.length) {
+      text(el("matchnote"), "not run yet");
+      el("matches").innerHTML = '<div class="empty">' + esc(book.note) + '</div>';
+      return;
+    }
+    text(el("matchnote"), matches.length + " clearing all 8");
+    if (!matches.length) {
+      el("matches").innerHTML = '<div class="empty">' +
+        'No listed company clears every criterion.<br>' +
+        'That is a result rather than a failure — this screen is deliberately ' +
+        'strict, and one that always returns something is not screening.</div>';
+      return;
+    }
+
+    el("matches").innerHTML = matches.map(function (r) {
+      var k = r.checks || {};
+      function cell(label, value, good) {
+        return '<div><div class="k">' + esc(label) + '</div>' +
+               '<div class="v ' + (good ? "ok" : "") + '">' + value + '</div></div>';
+      }
+      var metrics =
+        cell("Altman Z", num(k.altman_z && k.altman_z.value), true) +
+        cell("Piotroski", (k.piotroski && k.piotroski.value) + "/9", true) +
+        cell("Market cap", cr(k.market_cap_cr && k.market_cap_cr.value)) +
+        cell("Op margin", num(k.operating_margin && k.operating_margin.value, 1) + "%", true) +
+        cell("Sales CAGR", num(k.sales_growth && k.sales_growth.value, 1) + "%", true) +
+        cell("Profit CAGR", num(k.profit_growth && k.profit_growth.value, 1) + "%", true) +
+        cell("Debt/equity", num(k.debt_to_equity && k.debt_to_equity.value, 2), true) +
+        cell("Promoter", num(k.promoter_holding && k.promoter_holding.value, 1) + "%", true);
+
+      return '<div class="co">' +
+        '<div class="cotop">' +
+          '<span class="sym">' + esc(r.symbol) + '</span>' +
+          (r.sector ? '<span class="sector">' + esc(r.sector) + '</span>' : '') +
+          (typeof r.price === "number"
+            ? '<span class="px">₹' + r.price.toLocaleString("en-IN") + '</span>' : '') +
+        '</div>' +
+        '<div class="subtle">' + esc(r.name || "") + '</div>' +
+        '<div class="metrics">' + metrics + '</div>' +
+        '<div class="window">Growth compounded over ' + esc(r.growth_window_years) +
+          ' years — this feed does not carry ten.</div>' +
+        '</div>';
+    }).join("");
+  }
+})();
+</script>
+</body>
+</html>

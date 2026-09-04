@@ -33,6 +33,7 @@ import ipo
 import llm
 import market
 import portfolio
+import quality_screen
 import research
 import scheduler as scheduler_mod
 import scoring
@@ -49,6 +50,7 @@ DB_PATH = os.path.join(DB_DIR, "signals.db")
 DASHBOARD = os.path.join(HERE, "dashboard.html")
 IPO_PAGE = os.path.join(HERE, "ipo_page.html")
 INTRADAY_PAGE = os.path.join(HERE, "intraday_page.html")
+QUALITY_PAGE = os.path.join(HERE, "quality_page.html")
 IST = timezone(timedelta(hours=5, minutes=30))
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
@@ -1264,6 +1266,12 @@ def intraday_desk_page():
         return Response(fh.read(), mimetype="text/html")
 
 
+@app.get("/quality-desk")
+def quality_desk_page():
+    with open(QUALITY_PAGE, "r", encoding="utf-8") as fh:
+        return Response(fh.read(), mimetype="text/html")
+
+
 @app.get("/config")
 def config():
     provider = llm.detect_provider()
@@ -1439,6 +1447,29 @@ def intraday_route():
     """Today's intraday setups, each from a named and separately measured rule."""
     try:
         return jsonify(intraday_desk.scan(log=log))
+    except Exception as exc:                                       # noqa: BLE001
+        return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
+
+
+@app.get("/quality")
+def quality_route():
+    """
+    The fundamental quality screen.
+
+    Served from cache only. Screening 2,288 companies takes far longer than a
+    request should, so `python quality_screen.py` runs it and this hands back
+    whatever that last produced — with its own timestamp, so a stale answer is
+    visible rather than silent.
+    """
+    try:
+        blob = quality_screen.read_cache(max_age_hours=24 * 14)
+        if not blob:
+            return jsonify({
+                "matches": [], "criteria": quality_screen.DEFAULTS,
+                "note": "no screen has been run yet — run `python quality_screen.py` "
+                        "to build one (it takes a while: 2,288 companies)",
+            })
+        return jsonify(blob)
     except Exception as exc:                                       # noqa: BLE001
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 

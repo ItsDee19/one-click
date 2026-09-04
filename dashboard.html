@@ -185,6 +185,13 @@
   .navlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
   .navlink svg{flex:none;}
 
+  .onlybuys{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+    font-size:11.5px;color:var(--muted);user-select:none;white-space:nowrap;
+  }
+  .onlybuys input{accent-color:var(--accent);margin:0;cursor:pointer;}
+  .onlybuys:hover{color:var(--ink-2);}
+
   button.primary{
     position:relative;overflow:hidden;
     border:0;border-radius:10px;cursor:pointer;
@@ -739,6 +746,13 @@
     </div>
     <div class="controls">
       <span class="chip" id="phase"><span class="livedot"></span><span id="phasetext">…</span></span>
+      <a href="/quality-desk" class="navlink" id="qualitylink" title="Open quality screen">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2l2.6 6.6L21 9.2l-5 4.4 1.5 6.7L12 17l-5.5 3.3L8 13.6 3 9.2l6.4-.6z"/>
+        </svg>
+        Quality
+      </a>
       <a href="/intraday-desk" class="navlink" id="intradaylink" title="Open intraday desk">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -844,6 +858,10 @@
   <div class="sechead">
     <h2>Latest verdicts</h2>
     <span class="note" id="feednote">no verdicts yet</span>
+    <label class="onlybuys" title="Show only stocks the panel rated BUY for the multi-week horizon">
+      <input type="checkbox" id="buysonly" checked />
+      <span>Long-term buys only</span>
+    </label>
   </div>
   <div class="feed enter d4" id="feed">
     <div class="empty">Nothing analysed yet. Pick a mode and start the panel.</div>
@@ -894,10 +912,31 @@
 
   function api(path) { return API + path; }
 
+  var BUYS_ONLY = true;
+  try {
+    var saved = localStorage.getItem("dalal.buysonly");
+    if (saved !== null) { BUYS_ONLY = saved === "1"; }
+  } catch (e) { /* private mode */ }
+
+
+  (function () {
+    var box = document.getElementById("buysonly");
+    if (!box) { return; }
+    box.checked = BUYS_ONLY;
+    box.addEventListener("change", function () {
+      BUYS_ONLY = box.checked;
+      try { localStorage.setItem("dalal.buysonly", BUYS_ONLY ? "1" : "0"); }
+      catch (e) { /* private mode */ }
+      renderedVerdicts = -1;               // force a full repaint under the new filter
+      if (LAST_VERDICTS) { renderFeed(LAST_VERDICTS); }
+    });
+  })();
+
 
 
   var el = function (id) { return document.getElementById(id); };
   var CFG = null, agentNodes = {}, renderedVerdicts = 0, lastRunKey = "";
+  var LAST_VERDICTS = null;
 
   function text(node, value) {
     if (node && node.textContent !== String(value)) { node.textContent = value; }
@@ -1175,26 +1214,47 @@
     textFlash(node, str);
   }
 
+  /* The panel rates every stock it looks at, but most of the time the useful
+     answer is the short list it would actually buy. Filtering is a view, not
+     a change to the analysis: the AVOIDs and WATCHes are still there, still
+     stored, and one click away. */
+  function isLongBuy(v) {
+    var p = (v.tracks || {}).positional;
+    return !!(p && p.verdict === "BUY");
+  }
+
   function renderFeed(verdicts) {
     var feed = el("feed");
-    text(el("feednote"), verdicts.length
-      ? verdicts.length + " analysed · newest first"
+    LAST_VERDICTS = verdicts || LAST_VERDICTS;
+    var all = verdicts || [];
+    var shown = BUYS_ONLY ? all.filter(isLongBuy) : all;
+
+    text(el("feednote"), all.length
+      ? (BUYS_ONLY
+          ? shown.length + " long-term buy" + (shown.length === 1 ? "" : "s") +
+            " of " + all.length + " analysed"
+          : all.length + " analysed · newest first")
       : "no verdicts yet");
 
-    if (!verdicts.length) {
-      if (!feed.querySelector(".empty")) {
-        feed.innerHTML = '<div class="empty">Nothing analysed yet. Pick a mode and start the panel.</div>';
-      }
+    if (!all.length) {
+      feed.innerHTML = '<div class="empty">Nothing analysed yet. Pick a mode and start the panel.</div>';
+      renderedVerdicts = 0;
       return;
     }
-    if (verdicts.length === renderedVerdicts) { return; }
+    if (!shown.length) {
+      /* Saying so plainly beats an empty box. A screen that never returns
+         nothing is not screening, and in a risk-off regime BUYs are gated
+         deliberately rather than by accident. */
+      feed.innerHTML = '<div class="empty">None of the ' + all.length +
+        ' stocks analysed rated BUY for the multi-week horizon.<br>' +
+        'Untick “Long-term buys only” to see what the panel said about them.</div>';
+      renderedVerdicts = -1;
+      return;
+    }
+    if (shown.length === renderedVerdicts) { return; }
 
-    var empty = feed.querySelector(".empty");
-    if (empty) { feed.innerHTML = ""; }
-
-    /* newest verdicts arrive at the front of the array */
-    var fresh = verdicts.slice(0, verdicts.length - renderedVerdicts).reverse();
-    fresh.forEach(function (v) {
+    feed.innerHTML = "";
+    shown.slice().reverse().forEach(function (v) {
       var row = document.createElement("div");
       row.className = "row";
       var dir = typeof v.day_change_pct !== "number" ? "flat"
@@ -1223,7 +1283,7 @@
         '</div>';
       feed.insertBefore(row, feed.firstChild);
     });
-    renderedVerdicts = verdicts.length;
+    renderedVerdicts = shown.length;
   }
 
   function renderSectors(heat) {

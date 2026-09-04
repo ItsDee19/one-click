@@ -39,6 +39,7 @@ PAGES = [
     ("dashboard.html", "index.html"),
     ("ipo_page.html", "ipo-desk.html"),
     ("intraday_page.html", "intraday-desk.html"),
+    ("quality_page.html", "quality-desk.html"),
 ]
 
 

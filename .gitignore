@@ -14,3 +14,4 @@ server.err
 backtest_results.json
 backtest_5y.json
 .drhp_cache/
+quality_screen.json
