@@ -3,6 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Dalal Desk — a research terminal for Indian equities. Eight agents screen the exchange, argue each pick, and report what they cannot verify." />
+<meta name="theme-color" content="#080b12" />
+<meta property="og:title" content="Dalal Desk" />
+<meta property="og:description" content="A research terminal for Indian equities. Analysis only — it never places an order." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 32 32&quot;%3E%3Crect width=&quot;32&quot; height=&quot;32&quot; rx=&quot;7&quot; fill=&quot;%234cc9f0&quot;/%3E%3Cpath d=&quot;M7 21l5-6 4 3.5L25 10&quot; fill=&quot;none&quot; stroke=&quot;%2303121a&quot; stroke-width=&quot;2.6&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" />
 <title>Agent desk · Indian stock analysis</title>
 <style>
   /* ======================================================================
@@ -34,7 +43,9 @@
     --red-soft:#2c1417;
     --unavailable-soft:#161b24;
     --grid:rgba(255,255,255,.022);
-    --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -28px rgba(0,0,0,.9);
+    --shadow:0 1px 0 rgba(255,255,255,.035) inset,
+             0 1px 2px rgba(4,8,16,.5),
+             0 18px 40px -26px rgba(6,12,26,.95);
     --radius:14px;
   }
 
@@ -78,7 +89,9 @@
   body{
     background-color:var(--bg);
     color:var(--ink);
-    font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    font:15px/1.5 Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-variant-numeric:tabular-nums;
+    text-wrap:pretty;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
     /* Deliberately NOT transitioned. Transitioning a property whose value
@@ -102,6 +115,16 @@
     z-index:0;
   }
   .wrap > *{position:relative;z-index:1;}
+
+  /* Grain, fixed and non-interactive. Flat vector surfaces read as sterile
+     and this is the smallest amount of texture that fixes it — but it sits
+     *behind* the content, not over it. Laid on top at 3.2% it dropped the
+     --faint token from 5.03:1 to 4.43:1, under the 4.5:1 floor DESIGN.md
+     treats as non-negotiable. Same rule as the gradients: never behind text. */
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
 
   ::selection{background:rgba(var(--accent-glow),.28);}
 
@@ -152,7 +175,7 @@
     border:1px solid var(--border-strong);border-radius:10px;
     background:var(--card);color:var(--ink-2);
     padding:9px 12px;font:inherit;font-size:13px;
-    transition:border-color .18s ease, background .18s ease, color .18s ease;
+    transition:border-color .18s ease, background-color .18s ease, color .18s ease;
   }
   select{
     appearance:none;padding-right:30px;cursor:pointer;
@@ -168,6 +191,11 @@
 
   button.ghost{cursor:pointer;width:38px;padding:9px 0;display:grid;place-items:center;}
   button.ghost:hover{color:var(--accent);}
+  /* Pressed feedback. Without it a click has no physical acknowledgement and
+     the button feels like a picture of a button. */
+  button.ghost:active,.navlink:active{transform:translateY(1px);}
+  button.primary:active{transform:scale(.985);}
+  select:active,input[type=number]:active{transform:none;}
 
   /* A text+icon link out to another page. Deliberately its own class rather
      than reusing .ghost: every ghost rule above is qualified as button.ghost,
@@ -179,7 +207,7 @@
     background:var(--card);color:var(--ink-2);
     padding:9px 14px;font:inherit;font-size:13px;font-weight:600;
     text-decoration:none;
-    transition:border-color .18s ease, background .18s ease, color .18s ease;
+    transition:border-color .18s ease, background-color .18s ease, color .18s ease;
   }
   .navlink:hover{border-color:var(--accent);color:var(--accent);}
   .navlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
@@ -190,6 +218,15 @@
     font-size:11.5px;color:var(--muted);user-select:none;white-space:nowrap;
   }
   .onlybuys input{accent-color:var(--accent);margin:0;cursor:pointer;}
+
+  /* Visible only once focused, which is the only time it is useful. */
+  .skip{
+    position:absolute;left:-9999px;top:8px;z-index:10;
+    background:var(--card);color:var(--ink);border:1px solid var(--accent);
+    border-radius:9px;padding:10px 16px;font-size:13px;font-weight:600;
+    text-decoration:none;
+  }
+  .skip:focus{left:16px;}
   .onlybuys:hover{color:var(--ink-2);}
 
   button.primary{
@@ -267,7 +304,7 @@
   }
   .stripitem{
     display:flex;align-items:baseline;gap:9px;min-width:0;
-    padding:9px 14px;border-radius:9px;transition:background .2s ease;
+    padding:9px 14px;border-radius:9px;transition:background-color .2s ease;
   }
   .stripitem:hover{background:var(--card-high);}
   .stripitem .k{
@@ -321,7 +358,7 @@
   .agent .icon{
     width:32px;height:32px;border-radius:9px;flex:none;display:grid;place-items:center;
     background:var(--card-high);color:var(--muted);
-    transition:background .3s ease,color .3s ease,transform .3s cubic-bezier(.2,.7,.3,1);
+    transition:background-color .3s ease,color .3s ease,transform .3s cubic-bezier(.2,.7,.3,1);
   }
   .agent.working .icon{
     background:var(--accent-soft);color:var(--accent);transform:scale(1.06);
@@ -381,7 +418,7 @@
   .row{
     padding:15px 18px;border-top:1px solid var(--border);
     animation:slidein .45s cubic-bezier(.2,.7,.3,1) both;
-    transition:background .2s ease;
+    transition:background-color .2s ease;
   }
   .row:first-child{border-top:0;}
   .row:hover{background:var(--card-low);}
@@ -485,7 +522,7 @@
   .trow{
     display:grid;gap:14px;align-items:center;padding:11px 18px;
     border-top:1px solid var(--border);font-size:12.5px;
-    transition:background .2s ease;
+    transition:background-color .2s ease;
   }
   .trow:not(.head):hover{background:var(--card-low);}
   .trow:first-child{border-top:0;}
@@ -509,7 +546,7 @@
   .ipo{
     padding:14px 18px;border-top:1px solid var(--border);
     animation:slidein .45s cubic-bezier(.2,.7,.3,1) both;
-    transition:background .2s ease;
+    transition:background-color .2s ease;
   }
   .ipo:first-child{border-top:0;}
   .ipo:hover{background:var(--card-low);}
@@ -713,6 +750,7 @@
 <!-- shared:head -->
 </head>
 <body>
+<a class="skip" href="#board">Skip to the board</a>
 <div class="wrap">
 
   <header>
@@ -732,7 +770,7 @@
         <p id="engineline">detecting engine…</p>
       </div>
     </div>
-    <div class="controls">
+    <nav class="controls" aria-label="Desks and controls">
       <span class="chip" id="phase"><span class="livedot"></span><span id="phasetext">…</span></span>
       <a href="/quality-desk" class="navlink" id="qualitylink" title="Open quality screen">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -772,11 +810,12 @@
         <span id="startspin" class="spinner" style="display:none"></span>
         <span id="startlabel">Start agents</span>
       </button>
-    </div>
+    </nav>
   </header>
 
   <div class="banner" id="banner"></div>
 
+  <main id="board">
   <div class="kpis enter d1">
     <div class="kpi">
       <div class="label">Universe</div>
@@ -843,6 +882,7 @@
   </div>
   <div class="feed" id="sectfeed" style="display:none;margin-bottom:30px"></div>
 
+  <section aria-label="Latest verdicts">
   <div class="sechead">
     <h2>Latest verdicts</h2>
     <span class="note" id="feednote">no verdicts yet</span>
@@ -855,10 +895,14 @@
     <div class="empty">Nothing analysed yet. Pick a mode and start the panel.</div>
   </div>
 
+  </section>
+
   <details class="log">
     <summary>Run log</summary>
     <div class="logbox" id="log">—</div>
   </details>
+
+  </main>
 
   <footer>
     <span id="foot-left">Built from — real stocks · data pulled — · engine: —</span>

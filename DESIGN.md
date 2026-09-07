@@ -44,36 +44,36 @@ colors:
   unavailable-container: "#161b24"
 typography:
   headline-md:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 17px
     fontWeight: "650"
     lineHeight: 1.3
     letterSpacing: -0.01em
   title-sm:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 14px
     fontWeight: "640"
     lineHeight: 1.35
   metric-lg:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 28px
     fontWeight: "660"
     lineHeight: 1.15
     letterSpacing: -0.02em
     fontFeature: "'tnum' 1, 'zero' 1"
   metric-md:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 17px
     fontWeight: "640"
     lineHeight: 1.2
     fontFeature: "'tnum' 1, 'zero' 1"
   body-md:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 13px
     fontWeight: "400"
     lineHeight: 1.45
   label-sm:
-    fontFamily: Inter
+    fontFamily: Geist
     fontSize: 10.5px
     fontWeight: "650"
     lineHeight: 1.3
@@ -185,7 +185,7 @@ levels. Numbers a user might act on were the least legible text on the page.
 
 ## Typography
 
-One family, Inter, with a system fallback stack. Size and weight carry the
+One family, Geist, with a system fallback stack. Size and weight carry the
 hierarchy; there are no decorative faces.
 
 Labels are small, uppercase and widely tracked (0.09-0.13em). At 9.5-10.5px
@@ -196,6 +196,14 @@ The important rule is **tabular numerals**. Every metric, price and percentage
 uses `font-feature-settings: 'tnum' 1`, so that digits occupy identical width.
 Without it, a column of prices visibly jitters as it updates on each poll,
 which reads as instability in the data rather than in the font.
+
+The face changed from Inter to Geist, for two reasons. Inter is the default
+choice to the point of being a fingerprint, and Geist keeps the technical
+register while having more of its own character. The more embarrassing reason
+is that Inter was named here and never actually loaded: the stylesheet listed
+it in a fallback stack behind `-apple-system` and `Segoe UI`, so on Windows
+this terminal had been rendering in Segoe UI the whole time. The spec and the
+screen now agree, and the font is loaded rather than hoped for.
 
 `label-sm` is uppercase with wide tracking and is used for every field label —
 KPI captions, agent stat names, track names, table headers. It should never be
