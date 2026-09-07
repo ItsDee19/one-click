@@ -20,9 +20,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 HEAD_MARKER = "<!-- shared:head -->"
 JS_MARKER = "<!-- shared:js -->"
+CSS_MARKER = "<!-- shared:styles -->"
+SHELL_MARKER = "<!-- shared:shell -->"
 
 HEAD_FILE = os.path.join(HERE, "shared_head.html")
 JS_FILE = os.path.join(HERE, "shared_desk.js")
+CSS_FILE = os.path.join(HERE, "shared_styles.css")
+SHELL_FILE = os.path.join(HERE, "shared_shell.html")
 
 
 def _read(path):
@@ -34,6 +38,10 @@ def render(html: str) -> str:
     """Replace the shared markers with their content."""
     if HEAD_MARKER in html:
         html = html.replace(HEAD_MARKER, _read(HEAD_FILE).strip(), 1)
+    if CSS_MARKER in html:
+        html = html.replace(CSS_MARKER, "<style>\n" + _read(CSS_FILE).rstrip() + "\n</style>", 1)
+    if SHELL_MARKER in html:
+        html = html.replace(SHELL_MARKER, _read(SHELL_FILE).strip(), 1)
     if JS_MARKER in html:
         html = html.replace(
             JS_MARKER, "<script>\n" + _read(JS_FILE).rstrip() + "\n</script>", 1)

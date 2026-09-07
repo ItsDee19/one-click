@@ -5,10 +5,8 @@
   (function () {
     try {
       var t = localStorage.getItem("dalal.theme");
-      if (!t) {
-        t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-      }
+      if (t !== "light" && t !== "dark") { t = "light"; }
       document.documentElement.setAttribute("data-theme", t);
-    } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+    } catch (e) { document.documentElement.setAttribute("data-theme", "light"); }
   })();
 </script>

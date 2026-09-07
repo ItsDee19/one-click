@@ -3,234 +3,66 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Intraday desk · Indian stock analysis</title>
+<title>Intraday desk · Dalal Desk</title>
 <style>
-  /* ======================================================================
-     Dalal Desk — Intraday page. Same token system as the dashboard.
-     ====================================================================== */
-  :root,
-  [data-theme="dark"]{
-    --bg:#080b12; --bg-elev:#0a0e16; --card:#0e1219; --card-low:#0b0f16;
-    --card-high:#141924; --border:#1b2130; --border-strong:#28303f;
-    --ink:#e9eef8; --ink-2:#aab6cc; --muted:#8896ae; --faint:#78859c;
-    --accent:#4cc9f0; --accent-soft:#0c2230; --accent-glow:76,201,240;
-    --green:#3ddc97; --green-soft:#0d2a1f; --amber:#f5b544; --amber-soft:#2b2110;
-    --red:#ff6b6b; --red-soft:#2c1417; --unavailable-soft:#161b24;
-    --grid:rgba(255,255,255,.022);
-    --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -28px rgba(0,0,0,.9);
-    --radius:14px;
-  }
-  [data-theme="light"]{
-    --bg:#f5f6f8; --bg-elev:#ffffff; --card:#ffffff; --card-low:#fcfcfd;
-    --card-high:#fafbfc; --border:#e5e7ec; --border-strong:#d6d9e0;
-    --ink:#111520; --ink-2:#3d4451; --muted:#5d6573; --faint:#646c7b;
-    --accent:#2b62ee; --accent-soft:#eef3ff; --accent-glow:43,98,238;
-    --green:#0f7a4d; --green-soft:#e9f6ef; --amber:#94620a; --amber-soft:#fdf3e0;
-    --red:#b02a20; --red-soft:#fdeeec; --unavailable-soft:#f0f1f4;
-    --grid:rgba(17,21,32,.025);
-    --shadow:0 1px 2px rgba(17,21,32,.05), 0 10px 28px -22px rgba(17,21,32,.45);
-  }
-
-  @media (prefers-reduced-motion: reduce){
-    *,*::before,*::after{
-      animation-duration:.001ms !important;animation-iteration-count:1 !important;
-      transition-duration:.001ms !important;scroll-behavior:auto !important;
-    }
-  }
-
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
-  body{
-    background-color:var(--bg); color:var(--ink);
-    font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
-    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-    background-image:
-      linear-gradient(var(--grid) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-    background-size:56px 56px, 56px 56px;
-  }
-  .wrap{max-width:1000px;margin:0 auto;padding:26px 24px 72px;position:relative;}
-  body::before{
-    content:"";position:fixed;inset:0 0 auto 0;height:340px;pointer-events:none;
-    background-image:radial-gradient(60% 100% at 50% 0%,
-      rgba(var(--accent-glow),.07), transparent 70%);
-    z-index:0;
-  }
-  .wrap > *{position:relative;z-index:1;}
-  ::selection{background-color:rgba(var(--accent-glow),.28);}
-
-  @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
-  .enter{animation:rise .5s cubic-bezier(.2,.7,.3,1) both;}
-  .d1{animation-delay:.04s;} .d2{animation-delay:.09s;} .d3{animation-delay:.14s;}
-
-  header{
-    display:flex;align-items:center;justify-content:space-between;gap:24px;
-    flex-wrap:wrap;margin-bottom:22px;
-  }
-  .brandline{display:flex;align-items:center;gap:13px;min-width:0;}
-  .brandtext{min-width:0;}
-  .brandtext h1{
-    margin:0;font-size:17.5px;font-weight:650;letter-spacing:-.015em;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .brandtext h1 .sep{color:var(--faint);font-weight:400;margin:0 8px;}
-  .brandtext h1 .light{color:var(--muted);font-weight:450;}
-  .brandtext p{
-    margin:3px 0 0;font-size:12px;color:var(--muted);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62ch;
-  }
-  .controls{display:flex;align-items:center;gap:9px;}
-
-  button.ghost{
-    border:1px solid var(--border-strong);border-radius:10px;
-    background-color:var(--card);color:var(--ink-2);
-    padding:9px 12px;font:inherit;font-size:13px;cursor:pointer;
-    transition:border-color .18s ease, background-color .18s ease, color .18s ease;
-    display:grid;place-items:center;
-  }
-  button.ghost:hover{border-color:var(--accent);color:var(--accent);}
-  button.ghost:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-
-  .back-btn{
-    display:inline-flex;align-items:center;gap:8px;
-    padding:9px 16px;border-radius:10px;
-    background-color:var(--card);border:1px solid var(--border-strong);
-    color:var(--ink-2);font:inherit;font-size:13px;font-weight:600;
-    cursor:pointer;text-decoration:none;white-space:nowrap;
-    transition:border-color .18s ease, color .18s ease, background-color .18s ease;
-  }
-  .back-btn:hover{border-color:var(--accent);color:var(--accent);}
-  .back-btn svg{flex:none;}
-
-  .sechead{
-    display:flex;align-items:baseline;justify-content:space-between;
-    margin:0 2px 12px;gap:16px;
-  }
-  .sechead h2{
-    margin:0;font-size:11px;font-weight:700;letter-spacing:.13em;
-    text-transform:uppercase;color:var(--muted);
-    display:flex;align-items:center;gap:10px;
-  }
-  .sechead h2::after{
-    content:"";height:1px;width:52px;
-    background-image:linear-gradient(90deg,var(--border-strong),transparent);
-  }
-  .sechead .note{font-size:12px;color:var(--muted);}
-
-  .feed{
-    background-color:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-    box-shadow:var(--shadow);overflow:hidden;margin-bottom:26px;
-  }
-  .empty{padding:46px 20px;text-align:center;color:var(--muted);font-size:13px;}
-
-  /* ---------------- the honesty banner ---------------- */
-  .truth{
-    border:1px solid var(--border);border-left:3px solid var(--amber);
-    background-color:var(--card);border-radius:10px;
-    padding:14px 16px;margin-bottom:22px;font-size:12.5px;
-    color:var(--ink-2);line-height:1.55;
-  }
-  .truth b{color:var(--ink);}
-
-  /* ---------------- strategy scoreboard ---------------- */
-  /* The card clips its overflow, so a narrow screen would silently cut the
-     expectancy column off rather than letting it be reached. Wide content
-     scrolls inside its own box instead. */
-  .tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-  .scoretable{width:100%;border-collapse:collapse;font-size:12.5px;min-width:340px;}
-  .scoretable th{
-    text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--faint);font-weight:700;padding:11px 14px;
-    background-color:var(--card-low);border-bottom:1px solid var(--border);
-    white-space:nowrap;
-  }
-  .scoretable td{
-    padding:11px 14px;border-bottom:1px solid var(--border);
-    font-variant-numeric:tabular-nums;
-  }
-  .scoretable tr:last-child td{border-bottom:0;}
-  .scoretable td.name{font-weight:640;}
-  .scoretable td.num{text-align:right;}
-  .pos{color:var(--green);font-weight:640;}
-  .neg{color:var(--red);font-weight:640;}
-  .flat{color:var(--muted);font-weight:640;}
-  .thin{
-    font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-    padding:2px 6px;border-radius:5px;margin-left:7px;
-    background-color:var(--amber-soft);color:var(--amber);
-  }
-
-  /* ---------------- picks ---------------- */
-  .pick{
-    padding:14px 18px;border-top:1px solid var(--border);
-    transition:background-color .2s ease;
-  }
+  .desk-section{margin-top:28px;min-width:0;}
+  .record-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .record-grid .desk-section{min-width:0;}
+  .scoretable{width:100%;border-collapse:collapse;min-width:540px;font-size:13px;}
+  .scoretable th{padding:14px 18px;text-align:left;color:var(--muted);font-size:12px;font-weight:600;background:var(--card-low);white-space:nowrap;}
+  .scoretable td{padding:16px 18px;border-top:1px solid var(--border);font-variant-numeric:tabular-nums;}
+  .scoretable .num{text-align:right;}
+  .scoretable .name{font-weight:650;min-width:150px;}
+  .pos{color:var(--green);font-weight:650;}.neg{color:var(--red);font-weight:650;}.flat{color:var(--muted);}
+  .thin{display:inline-flex;font-size:11px;font-weight:600;padding:2px 6px;margin:5px 0 0 7px;border-radius:5px;background:var(--amber-soft);color:var(--amber);white-space:nowrap;}
+  .record-note{margin:12px 2px 0;color:var(--muted);font-size:12px;}
+  .pick{padding:22px 24px;border-top:1px solid var(--border);}
   .pick:first-child{border-top:0;}
-  .pick:hover{background-color:var(--card-low);}
-  .picktop{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:4px;}
-  .sym{font-weight:660;font-size:14.5px;letter-spacing:-.01em;}
-  .stratchip{
-    font-size:9px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;
-    padding:3px 8px;border-radius:5px;background-color:var(--accent-soft);color:var(--accent);
-  }
-  .conf{font-size:14px;font-weight:660;font-variant-numeric:tabular-nums;}
-  .conf small{color:var(--faint);font-weight:500;}
-  .lastpx{margin-left:auto;font-size:12.5px;font-weight:640;
-          font-variant-numeric:tabular-nums;white-space:nowrap;}
-  .subtle{font-size:11.5px;color:var(--muted);margin-top:2px;
-          overflow:hidden;text-overflow:ellipsis;}
-  .levels{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));
-    gap:9px 14px;margin:10px 0 0;padding-top:10px;border-top:1px solid var(--border);
-  }
-  .levels .k{
-    font-size:9px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--faint);font-weight:700;
-  }
-  .levels .v{font-size:13px;font-weight:620;margin-top:2px;
-             font-variant-numeric:tabular-nums;}
-  .levels .v.dim{color:var(--faint);font-weight:450;}
-  .levels .v.stop{color:var(--red);}
-  .levels .v.tgt{color:var(--green);}
-  .why{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin-top:9px;}
-  .rec{
-    margin-top:8px;font-size:11px;color:var(--muted);
-    padding-top:8px;border-top:1px dashed var(--border);
-  }
-  .rec b{color:var(--ink-2);font-variant-numeric:tabular-nums;}
-
-  .loading{
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:60px 20px;gap:16px;color:var(--muted);font-size:13px;
-  }
-  .spinner-ring{
-    width:28px;height:28px;border:2px solid var(--border-strong);
-    border-top-color:var(--accent);border-radius:50%;
-    animation:spin .8s linear infinite;
-  }
-  @keyframes spin{to{transform:rotate(360deg);}}
-
-  footer{
-    margin-top:40px;padding:14px 2px 0;border-top:1px solid var(--border);
-    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
-    font-size:11px;color:var(--faint);
-  }
-
-  @media (max-width:640px){
-    .scoretable .hide-sm{display:none;}
-  }
-  @media (max-width:560px){
-    .wrap{padding:18px 13px 44px;}
-    .sechead{flex-direction:column;align-items:flex-start;gap:3px;}
-    .sechead h2::after{display:none;}
-    header{flex-direction:column;align-items:flex-start;}
-    .brandline{width:100%;}
-    .lastpx{margin-left:0;width:100%;}
-    footer{flex-direction:column;gap:8px;}
-  }
-  @media (pointer:coarse){
-    button.ghost,.back-btn{min-height:44px;}
-  }
+  .picktop{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .picktop h3{margin:0;font-size:17px;letter-spacing:-.02em;}
+  .stratchip{font-size:12px;font-weight:600;padding:4px 9px;border-radius:6px;background:var(--accent-soft);color:var(--accent);}
+  .conf{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;}
+  .conf b{color:var(--ink);font-size:14px;}
+  .lastpx{margin-left:auto;font-size:16px;font-weight:650;font-variant-numeric:tabular-nums;}
+  .subtle{font-size:13px;color:var(--muted);margin:5px 0 0;overflow-wrap:anywhere;}
+  .levels{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin:18px 0 0;padding:16px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+  .levels dt{font-size:12px;color:var(--muted);}
+  .levels dd{margin:5px 0 0;font-size:14px;font-weight:650;font-variant-numeric:tabular-nums;}
+  .levels .dim{color:var(--muted);}.levels .stop{color:var(--red);}.levels .tgt{color:var(--green);}
+  .why{font-size:14px;line-height:1.65;margin:14px 0 0;color:var(--ink-2);}
+  .rec{font-size:12px;color:var(--muted);margin-top:12px;}.rec b{color:var(--ink-2);}
+  .method{margin-top:18px;color:var(--ink-2);font-size:13px;line-height:1.7;}
+  .method summary{font-weight:600;color:var(--ink);cursor:pointer;padding:10px 0;}
+  .method p{max-width:85ch;margin:8px 0 0;}
+  @media(max-width:1280px){.record-grid{grid-template-columns:1fr;gap:0;}}
+  @media(max-width:700px){.levels{grid-template-columns:repeat(3,minmax(0,1fr));}.pick{padding:18px;}.lastpx{margin-left:0;}.record-grid{display:block;}}
+  @media(max-width:380px){.levels{grid-template-columns:repeat(2,minmax(0,1fr));}}
+</style>
+<style>
+/* Canonical design tokens. Inlined by page_render.py for Flask and Vercel. */
+:root,[data-theme="light"]{color-scheme:light;--bg:#f6f7fb;--bg-elev:#fff;--card:#fff;--card-low:#f8f9fc;--card-high:#f0f2f8;--border:#e5e7ef;--border-strong:#cdd1df;--ink:#222538;--ink-2:#4a5066;--muted:#626a80;--faint:#697187;--accent:#635bce;--accent-hover:#5148b6;--accent-soft:#eeedfb;--accent-glow:99,91,206;--on-accent:#fff;--green:#18704f;--green-soft:#e8f5ee;--amber:#8a5a12;--amber-soft:#fcf3e3;--red:#b33f49;--red-soft:#fcecef;--unavailable-soft:#eef0f5;--radius:14px;--shadow:none;--scrollbar-thumb:#b7bccd;--scrollbar-track:transparent;--scrollbar-hover:#9299b0;--scrollbar-active:#635bce;--font-body:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;--font-display:"Segoe UI Variable Display","Segoe UI",sans-serif;--space-sm:8px;--space-md:16px;--space-lg:24px;--radius-control:8px}
+[data-theme="dark"]{color-scheme:dark;--bg:#141720;--bg-elev:#1b1f2b;--card:#1e2330;--card-low:#191e29;--card-high:#282e3e;--border:#343b4d;--border-strong:#525b73;--ink:#f0f1fa;--ink-2:#c0c6d9;--muted:#a3acc3;--faint:#9ca6c0;--accent:#b2a9ff;--accent-hover:#c8c2ff;--accent-soft:#302d4e;--accent-glow:178,169,255;--on-accent:#211c45;--green:#7cd6ad;--green-soft:#203d33;--amber:#edc076;--amber-soft:#3d3324;--red:#f29ca6;--red-soft:#402c36;--unavailable-soft:#2a3040;--scrollbar-thumb:#535d77;--scrollbar-hover:#7985a2;--scrollbar-active:#b2a9ff}
+*{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track)}
+*::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border:2px solid var(--bg);border-radius:8px}*::-webkit-scrollbar-thumb:hover{background:var(--scrollbar-hover)}*::-webkit-scrollbar-thumb:active{background:var(--scrollbar-active)}*::-webkit-scrollbar-track{background:var(--scrollbar-track)}
+html{scrollbar-gutter:stable;scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--font-body);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}::selection{background:var(--accent-soft);color:var(--accent)}a{color:var(--accent);text-underline-offset:3px}a,button,summary,select{cursor:pointer}button,input,select,textarea{font:inherit}input,textarea{caret-color:var(--accent)}button,select,input{min-height:42px}button:disabled{cursor:not-allowed;opacity:.6}button:active:not(:disabled){transform:translateY(1px)}a:hover{text-decoration:underline}svg{flex:none}button svg,.desk-nav svg,.desk-mark svg,.research-note svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}h1,h2,h3,p{margin-top:0}h1,h2,h3{font-family:var(--font-display)}[hidden]{display:none!important}main,section,article,aside{min-width:0}.skip{position:fixed;left:12px;top:-100px;z-index:100;padding:12px 18px;background:var(--card);color:var(--accent);border:1px solid var(--accent);border-radius:8px}.skip:focus{top:12px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.desk-sidebar{position:fixed;inset:0 auto 0 0;width:220px;background:var(--bg-elev);border-right:1px solid var(--border);padding:30px 18px 20px;display:flex;flex-direction:column;z-index:20}.desk-brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;padding:0 6px}.desk-brand:hover{text-decoration:none}.desk-mark{width:37px;height:37px;display:grid;place-items:center;border-radius:11px;background:var(--accent);color:var(--on-accent)}.desk-mark svg{width:26px;height:26px}.desk-brand strong{display:block;font-size:18px;letter-spacing:-.5px}.desk-brand small{display:block;font-size:10px;color:var(--muted);margin-top:1px}.desk-nav-label{margin:42px 12px 12px;font-size:11px;color:var(--faint);font-weight:600}.desk-nav{display:grid;gap:6px}.desk-nav a{display:flex;align-items:center;gap:12px;min-height:46px;padding:11px 13px;border-radius:9px;color:var(--muted);text-decoration:none;font-weight:550;font-size:13px}.desk-nav a:hover{background:var(--card-low);color:var(--ink)}.desk-nav a[aria-current="page"]{background:var(--accent-soft);color:var(--accent);font-weight:650}.desk-sidebar-bottom{margin-top:auto;padding-top:34px}.research-note{padding:15px 12px;background:var(--card-low);border-radius:12px}.research-note svg{color:var(--accent);margin-bottom:9px}.research-note strong{display:block;font-size:11px}.research-note p{font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.6}.desk-docs{display:flex;justify-content:space-between;gap:6px;padding:18px 6px 0;color:var(--muted);font-size:11px}
+.desk-topbar{margin-left:220px;min-height:78px;padding:0 36px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:20px;background:var(--bg-elev)}.desk-breadcrumb{display:flex;gap:12px;align-items:center;font-size:12px;color:var(--muted)}.desk-breadcrumb strong{font-weight:550;color:var(--ink)}.desk-utilities{display:flex;align-items:center;gap:22px}.paper-badge{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}.paper-badge>span{width:6px;height:6px;border-radius:50%;background:var(--accent)}.desk-date{font-size:11px;color:var(--muted)}.theme-toggle{display:grid;place-items:center;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--muted);width:36px;min-height:36px}.theme-toggle:hover{background:var(--accent-soft);color:var(--accent)}.theme-toggle svg{width:17px;height:17px}
+body>.wrap{width:auto;max-width:1600px;margin:0 0 0 220px;padding:32px 36px 36px}.page-header{display:flex;align-items:center;justify-content:space-between;gap:22px;margin:0 0 26px}.page-title,.page-header h1{font-size:30px;line-height:1.2;letter-spacing:-.8px;margin:0 0 8px;font-weight:650}.page-description{font-size:13px;line-height:1.65;color:var(--muted);max-width:72ch;margin:0}.page-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.btn,.primary,.ghost,.navlink,.back{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border-strong);border-radius:var(--radius-control);padding:9px 15px;min-height:42px;background:var(--card);color:var(--ink-2);font-size:12px;font-weight:600;text-decoration:none;transition:background-color .15s,border-color .15s}.btn:hover,.ghost:hover,.navlink:hover,.back:hover{background:var(--card-low);border-color:var(--accent);color:var(--accent);text-decoration:none}.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}.primary:hover:not(:disabled){background:var(--accent-hover);text-decoration:none}.primary:disabled{background:var(--card-high);color:var(--muted);border-color:var(--border);opacity:1}.button-text{border:0;background:none;color:var(--accent);padding:6px 10px;font-weight:600;font-size:12px}.button-text:hover{background:var(--accent-soft);border-radius:8px}.card,.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px}.sechead{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 18px}.sechead h2{font-size:17px;font-weight:650;letter-spacing:-.3px;margin:0}.note,.subtle,.sub{font-size:12px;color:var(--muted)}.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:24px 0}.kpi{padding:20px 22px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);min-width:0}.label,.kpi .label{font-size:12px;font-weight:550;color:var(--muted)}.value,.kpi .value{font-family:var(--font-display);font-size:29px;font-weight:650;letter-spacing:-.8px;line-height:1.2;margin:12px 0 7px;overflow-wrap:anywhere}.kpi .value small{font-size:14px;color:var(--muted)}.kpi .sub{font-size:11px}.kpi-label-line{display:flex;justify-content:space-between;align-items:center;gap:8px}.kpi-label-line svg{width:17px;height:17px;color:var(--faint);fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.kpi-accent{background:var(--accent-soft);border-color:transparent}.kpi-accent .value{color:var(--accent)}
+input[type=search],input[type=text],input[type=number],select{border:1px solid var(--border-strong);border-radius:8px;padding:9px 12px;background:var(--card);color:var(--ink);max-width:100%;min-width:0;font-size:12px}input::placeholder{color:var(--faint);opacity:1}input:hover,select:hover{border-color:var(--accent)}input[aria-invalid=true]{border-color:var(--red)}input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;min-height:0;margin:0}.field-label{display:block;font-size:11px;font-weight:600;color:var(--ink-2);margin:0 0 7px}.field-error{font-size:12px;color:var(--red);margin-top:8px}.field-error:empty{display:none}.search-field{display:flex;align-items:center;gap:9px;flex:1;min-width:150px;position:relative}.search-field svg{position:absolute;left:12px;width:17px;height:17px;stroke:var(--muted);fill:none;stroke-width:1.7;pointer-events:none}.search-field input{width:100%;padding-left:38px}.search-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.onlybuys{display:flex;gap:8px;align-items:center;color:var(--ink-2);font-size:12px;cursor:pointer;min-height:40px}.onlybuys:hover{color:var(--accent)}
+.banner{display:none;border-radius:10px;padding:12px 15px;font-size:12px;margin:0 0 18px;overflow-wrap:anywhere}.banner.show{display:block}.banner.warn{background:var(--amber-soft);color:var(--amber)}.banner.err{background:var(--red-soft);color:var(--red)}.banner button{margin-left:10px}.empty{text-align:center;color:var(--muted);padding:44px 20px;font-size:13px}.empty strong{display:block;color:var(--ink);font-size:17px;margin-bottom:8px}.empty p{max-width:48ch;margin:0 auto 18px}.empty-icon{display:grid;place-items:center;width:52px;height:52px;margin:0 auto 18px;background:var(--accent-soft);color:var(--accent);border-radius:14px}.empty-icon svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.6}.chip,.badge,.pill{display:inline-flex;gap:6px;align-items:center;justify-content:center;border-radius:6px;padding:4px 8px;font-size:10px;line-height:1.5;font-weight:650;white-space:nowrap}.chip{color:var(--muted);background:var(--card-low);font-size:11px;padding:6px 10px}.livedot,.dot{width:6px;height:6px;border-radius:50%;background:var(--faint);flex:none}.chip.live,.badge.BUY,.badge.APPLY,.pill.leading{color:var(--green);background:var(--green-soft)}.chip.live .livedot{background:var(--green)}.chip.pre,.badge.WATCH,.badge.NEUTRAL,.pill.mixed{color:var(--amber);background:var(--amber-soft)}.chip.pre .livedot{background:var(--amber)}.badge.AVOID,.pill.lagging{color:var(--red);background:var(--red-soft)}.badge.UNAVAILABLE,.badge.UNKNOWN,.pill.neutral{color:var(--faint);background:var(--unavailable-soft)}.up{color:var(--green)}.down{color:var(--red)}.flat{color:var(--muted)}.spinner{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .75s linear infinite;flex:none}@keyframes spin{to{transform:rotate(360deg)}}.loading-status{display:flex;align-items:center;justify-content:center;gap:10px;min-height:120px;color:var(--muted)}
+.table-wrap{overflow-x:auto;max-width:100%;border:1px solid var(--border);border-radius:12px;background:var(--card)}table{border-collapse:collapse;width:100%;font-size:12px}th{text-align:left;background:var(--card-low);font-size:11px;font-weight:600;color:var(--muted);padding:13px 16px;white-space:nowrap}td{padding:15px 16px;border-top:1px solid var(--border);color:var(--ink-2)}tbody tr:hover{background:var(--card-low)}details>summary{padding:12px 0;cursor:pointer;color:var(--ink-2);font-weight:600;font-size:12px}details>summary:hover{color:var(--accent)}.logbox{background:var(--card-low);border-radius:8px;padding:16px;max-height:280px;overflow:auto;font:12px/1.7 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink-2)}footer{margin-top:32px;padding-top:20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:10px;line-height:1.7;color:var(--muted)}footer span{max-width:90ch;overflow-wrap:anywhere}
+@media(min-width:1820px){body>.wrap{margin-left:calc(220px + (100vw - 1820px)/2);margin-right:calc((100vw - 1820px)/2)}}
+@media(max-width:1200px){.desk-sidebar{width:194px;padding-left:12px;padding-right:12px}.desk-topbar{margin-left:194px;padding:0 24px}body>.wrap{margin-left:194px;padding:26px 24px}.desk-brand strong{font-size:16px}.desk-brand small{font-size:9px}.kpi{padding:18px}.page-header{align-items:flex-start}.page-title,.page-header h1{font-size:27px}}
+@media(max-width:900px){.desk-sidebar{position:relative;width:100%;padding:18px 20px 0;border-right:0;border-bottom:1px solid var(--border);display:block}.desk-brand{padding:0}.desk-brand strong{font-size:18px}.desk-brand small{font-size:10px}.desk-sidebar-bottom,.desk-nav-label{display:none}.desk-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:17px 0 10px}.desk-nav a{justify-content:center;gap:8px;padding:9px 5px;min-height:42px;font-size:12px}.desk-nav svg{width:17px;height:17px}.desk-topbar{margin-left:0;min-height:58px;padding:0 24px}.desk-date{display:none}body>.wrap{margin-left:0;padding:26px 24px}.kpis{gap:12px}.kpi{padding:17px}.page-header{flex-wrap:wrap}.desk-utilities{gap:15px}}
+@media(max-width:600px){body>.wrap{padding:24px 16px}.desk-sidebar{padding:16px 12px 0}.desk-brand{padding:0 4px}.desk-nav a{flex-direction:column;gap:5px;font-size:10px;padding:8px 3px}.desk-topbar{padding:0 16px}.desk-breadcrumb{gap:8px;font-size:10px}.paper-badge{font-size:10px}.desk-utilities{gap:10px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:20px 0}.kpi{padding:16px}.value,.kpi .value{font-size:26px}.page-title,.page-header h1{font-size:27px}.page-description{font-size:12px}.page-header{margin-bottom:22px}.card,.panel{padding:17px}.sechead h2{font-size:16px}.page-actions{width:100%}.search-toolbar{gap:8px}.search-field{min-width:100%;flex-basis:100%}.table-wrap{border-radius:10px}footer{display:block}footer span{display:block;margin-bottom:8px}.theme-toggle{width:36px;min-height:36px}}
+.banner:not([id]){display:block;background:var(--amber-soft);color:var(--amber)}
+.data-card{padding:0;overflow:hidden}.data-card>.table-wrap{border:0;border-radius:0}
+.banner.info{background:var(--card-low);color:var(--muted);font-size:11px;margin-top:10px;margin-bottom:0}
+.list-tools{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:18px 0}.list-tools .search-field{display:flex;flex-direction:column;align-items:stretch;gap:7px;flex:0 1 360px}.list-tools .search-field>label{font-size:12px;color:var(--ink-2);font-weight:550}.search-control{display:flex;gap:8px;align-items:center}.list-tools .search-field input{padding-left:12px;min-width:0;width:100%}.search-control button{flex:none}.list-tools .note{margin:0}.list-tools #result-count{font-size:12px;color:var(--muted)}
+@media(max-width:600px){.list-tools .search-field{flex:1 1 100%}}
+/* Honor reduced motion and high contrast without hiding usable scrollbars. */
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none!important;transition:none!important}}
+@media(forced-colors:active){*{scrollbar-color:auto}.desk-nav a[aria-current=page]{outline:2px solid Highlight}.primary,.badge,.chip{border:1px solid ButtonText}}
 </style>
 <script>
   /* Applied before first paint, so the page never flashes the wrong theme.
@@ -239,11 +71,9 @@
   (function () {
     try {
       var t = localStorage.getItem("dalal.theme");
-      if (!t) {
-        t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-      }
+      if (t !== "light" && t !== "dark") { t = "light"; }
       document.documentElement.setAttribute("data-theme", t);
-    } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+    } catch (e) { document.documentElement.setAttribute("data-theme", "light"); }
   })();
 </script>
 <!-- build_web.py: api base -->
@@ -254,74 +84,67 @@
 </script>
 </head>
 <body>
-<div class="wrap">
-
-  <header>
-    <div class="brandline">
-      <a href="/" class="back-btn" title="Back to dashboard">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
-        </svg>
-        Dashboard
-      </a>
-      <div class="brandtext">
-        <h1><span id="brand">…</span><span class="sep">·</span><span class="light">Intraday desk</span></h1>
-        <p>Today's setups, from rules measured on this universe</p>
-      </div>
+<a class="skip" id="desk-skip" href="#main-content">Skip to research</a>
+<aside class="desk-sidebar" aria-label="Workspace">
+  <a class="desk-brand" href="/" aria-label="Dalal Desk home">
+    <span class="desk-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18V6h5a6 6 0 0 1 0 12H4Z"/><path d="m10 15 4-4 3 2 4-6"/></svg></span>
+    <span><strong id="brand">Dalal Desk</strong><small>Indian equity research</small></span>
+  </a>
+  <div class="desk-nav-label">Workspace</div>
+  <nav class="desk-nav" aria-label="Research desks">
+    <a href="/" data-desk="overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></a>
+    <a href="/intraday-desk" data-desk="intraday" id="intradaylink"><svg viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-10M15 5h6v6"/></svg><span>Intraday desk</span></a>
+    <a href="/quality-desk" data-desk="quality" id="qualitylink"><svg viewBox="0 0 24 24"><path d="m12 3 8 4v5c0 4-4 7-8 9-4-2-8-5-8-9V7l8-4Z"/><path d="m8 12 3 3 5-6"/></svg><span>Quality screen</span></a>
+    <a href="/ipo-desk" data-desk="ipo" id="ipolink"><svg viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13M2 21h20M8 10h1m6 0h1m-8 4h1m6 0h1m-5 7v-4h4v4"/></svg><span>IPO desk</span></a>
+  </nav>
+  <div class="desk-sidebar-bottom">
+    <div class="research-note"><svg viewBox="0 0 24 24"><path d="M12 3 3 7v5c0 4 4 7 9 9 5-2 9-5 9-9V7l-9-4Z"/><path d="m8 12 3 3 5-6"/></svg><strong>Research. With perspective.</strong><p>Evidence to inform your thinking. No real orders, ever.</p></div>
+    <a class="desk-docs" href="https://github.com/ItsDee19/one-click#readme" target="_blank" rel="noopener noreferrer">How Dalal Desk works <span aria-hidden="true">↗</span></a>
+  </div>
+</aside>
+<div class="desk-topbar">
+  <div class="desk-breadcrumb"><span>Workspace</span><span aria-hidden="true">/</span><strong id="desk-current">Overview</strong></div>
+  <div class="desk-utilities"><span class="paper-badge"><span aria-hidden="true"></span>Analysis only</span><span id="desk-date" class="desk-date"></span><button class="theme-toggle" id="theme" type="button" title="Switch theme" aria-label="Switch theme"><svg viewBox="0 0 24 24"><path id="themeicon" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></div>
+</div>
+<main class="wrap" id="main-content">
+  <header class="page-header">
+    <div>
+      <h1 class="page-title">Intraday desk</h1>
+      <p class="page-description">Today's setups, with the measured record behind every rule.</p>
     </div>
-    <div class="controls">
-      <button class="ghost" id="theme" title="Switch theme" aria-label="Switch theme">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path id="themeicon" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
-        </svg>
-      </button>
+    <div class="page-actions">
+      <a class="btn ghost" href="#strategy-record">View strategy record</a>
+      <button class="btn primary" id="refresh" type="button">Refresh data</button>
     </div>
   </header>
-
-  <div class="truth enter d1">
-    <b>On “70% win rate” strategies.</b> None of these reaches it, and nothing
-    credible does. The numbers below are what each rule actually produced on
-    this universe — not a figure from a trading site. Read <b>win rate</b> and
-    <b>expectancy</b> together: expectancy is the average profit per unit of
-    risk, and a rule can win most of its trades while still losing money.
-    Analysis only — no orders are ever placed.
-  </div>
-
-  <div class="sechead enter d1">
-    <h2>Strategy record</h2>
-    <span class="note" id="recnote">…</span>
-  </div>
-  <div class="feed enter d2" id="scoreboard">
-    <div class="loading"><div class="spinner-ring"></div>Measuring…</div>
-  </div>
-
-  <div class="sechead enter d2">
-    <h2>Swing record · positional</h2>
-    <span class="note" id="swingnote">…</span>
-  </div>
-  <div class="feed enter d2" id="swingboard">
-    <div class="loading"><div class="spinner-ring"></div>Measuring…</div>
-  </div>
-
-  <div class="sechead enter d2">
-    <h2>Today's setups</h2>
-    <span class="note" id="picknote">…</span>
-  </div>
-  <div class="feed enter d3" id="picks">
-    <div class="loading">
-      <div class="spinner-ring"></div>
-      Scanning the session…
+  <div class="banner show warn"><strong>Read win rate and expectancy together.</strong> A rule can win most of its trades and still lose money. Analysis only — no orders are ever placed.</div>
+  <div class="banner" id="load-error" role="status" aria-live="polite"></div>
+  <section class="desk-section" aria-labelledby="setups-title">
+    <div class="sechead">
+      <h2 id="setups-title">Today's setups</h2>
+      <span class="note" id="picknote" role="status">Awaiting session data</span>
     </div>
+    <div class="card data-card" id="picks"><div class="empty">Session data will appear here.</div></div>
+  </section>
+  <div class="record-grid" id="strategy-record">
+    <section class="desk-section" aria-labelledby="intraday-record-title">
+      <div class="sechead"><h2 id="intraday-record-title">Intraday strategy record</h2><span class="note" id="recnote">Awaiting record</span></div>
+      <div class="card data-card" id="scoreboard"><div class="empty">Measured strategies will appear here.</div></div>
+      <p class="record-note">Measured on NSE 5-minute bars. “Thin sample” flags a limited trade history.</p>
+    </section>
+    <section class="desk-section" aria-labelledby="swing-record-title">
+      <div class="sechead"><h2 id="swing-record-title">Swing strategy record</h2><span class="note" id="swingnote">Awaiting record</span></div>
+      <div class="card data-card" id="swingboard"><div class="empty">Positional strategies will appear here.</div></div>
+      <p class="record-note">Positional rules measured on daily bars, with their own sample window.</p>
+    </section>
   </div>
-
-  <footer>
-    <span>Analysis only. No orders are ever placed. Not investment advice.</span>
-    <span>Measured on NSE 5-minute bars · sample sizes always shown</span>
-  </footer>
-</div>
-
+  <details class="method">
+    <summary>How to read these results</summary>
+    <p><strong>On “70% win rate” strategies.</strong> None of these reaches it, and nothing credible does. These numbers are what each rule actually produced on this universe, not a figure from a trading site. Expectancy is the average profit per unit of risk. Read it alongside win rate and sample size.</p>
+    <p>The positional rules use years of daily bars; the intraday record is limited to 59 sessions. They cover different horizons and should be read with their own sample windows.</p>
+  </details>
+  <footer><span>Analysis only. No orders are ever placed. Not investment advice.</span><span>Sample sizes always shown</span></footer>
+</main>
 <script>
 /* ===========================================================================
    shared_desk.js — the plumbing every page needs, defined once.
@@ -364,6 +187,12 @@ var API = (function () {
 
 function api(path) { return API + path; }
 
+function deskMoney(value, digits) {
+  if (typeof value !== "number" || !Number.isFinite(value)) { return "—"; }
+  digits = digits === undefined ? 2 : digits;
+  return "₹" + value.toLocaleString("en-IN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
 /* The toggle. The theme itself is applied before first paint by the snippet
    in <head>; this only handles switching it afterwards. */
 (function () {
@@ -376,6 +205,13 @@ function api(path) { return API + path; }
     if (icon) {
       icon.setAttribute("d",
         document.documentElement.getAttribute("data-theme") !== "light" ? MOON : SUN);
+    }
+    var btn = el("theme");
+    if (btn) {
+      var label = document.documentElement.getAttribute("data-theme") === "light"
+        ? "Switch to dark theme" : "Switch to light theme";
+      btn.setAttribute("aria-label", label);
+      btn.title = label;
     }
   }
 
@@ -398,200 +234,195 @@ function api(path) { return API + path; }
     wire();
   }
 })();
+
+/* One request boundary for all desks: failed HTTP responses never masquerade
+   as empty datasets. Timers and abort listeners are released on every path. */
+function deskRequest(path, options) {
+  options = options || {};
+  var controller = new AbortController();
+  var callerSignal = options.signal;
+  var timedOut = false;
+  // Cold research endpoints parse filings or scan a live universe. Their
+  // existing server work can take minutes; status and actions stay bounded.
+  var timeout = path === "/ipos" || path === "/intraday" ? 180000 : 20000;
+  var timer = setTimeout(function () { timedOut = true; controller.abort(); }, timeout);
+  function cancel() { controller.abort(); }
+  if (callerSignal) {
+    if (callerSignal.aborted) { cancel(); }
+    else { callerSignal.addEventListener("abort", cancel, { once: true }); }
+  }
+  var requestOptions = Object.assign({}, options, { signal: controller.signal, cache: "no-store" });
+  return fetch(api(path), requestOptions).then(function (response) {
+    return response.json().catch(function () {
+      throw new Error("The server returned an unreadable response. Try again.");
+    }).then(function (data) {
+      if (!response.ok) {
+        var error = new Error(data.error || data.message || "The server could not complete the request. Try again.");
+        error.status = response.status;
+        throw error;
+      }
+      return data;
+    });
+  }).catch(function (error) {
+    if (timedOut) { throw new Error("The request took too long. Check your connection and try again."); }
+    throw error;
+  }).finally(function () {
+    clearTimeout(timer);
+    if (callerSignal) { callerSignal.removeEventListener("abort", cancel); }
+  });
+}
+
+/* Reusable read-only loading and retry. Previously rendered evidence is kept
+   in place while a refresh is pending or fails. Superseded results are ignored. */
+var deskLoads = new WeakMap();
+function deskLoad(path, render, errorElement) {
+  var region = typeof errorElement === "string" ? el(errorElement) : errorElement;
+  if (!region) { return Promise.reject(new Error("Missing loading status region")); }
+  var previous = deskLoads.get(region);
+  if (previous) { previous.abort(); }
+  var controller = new AbortController();
+  deskLoads.set(region, controller);
+  region.setAttribute("role", "status");
+  region.setAttribute("aria-live", "polite");
+  region.setAttribute("aria-busy", "true");
+  region.hidden = false;
+  region.classList.remove("err");
+  region.classList.add("banner", "show");
+  region.replaceChildren();
+  var spinner = document.createElement("span");
+  spinner.className = "spinner";
+  spinner.setAttribute("aria-hidden", "true");
+  region.append(spinner, document.createTextNode(" Loading research…"));
+  return deskRequest(path, { signal: controller.signal }).then(function (data) {
+    if (deskLoads.get(region) !== controller) { return; }
+    render(data);
+    region.hidden = true;
+    region.replaceChildren();
+  }).catch(function (error) {
+    if (deskLoads.get(region) !== controller || error.name === "AbortError") { return; }
+    region.classList.add("err");
+    region.replaceChildren();
+    var message = document.createElement("span");
+    message.textContent = "Research could not be loaded. " + (error.message === "Failed to fetch" ? "Check your connection and try again." : error.message);
+    var retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "ghost";
+    retry.textContent = "Retry loading";
+    retry.addEventListener("click", function () { deskLoad(path, render, region); });
+    region.append(message, retry);
+  }).finally(function () {
+    if (deskLoads.get(region) === controller) { region.setAttribute("aria-busy", "false"); }
+  });
+}
+
+/* Local list searches stay immediate and shareable, without disrupting IME. */
+function deskSearch(inputId, clearId, onChange) {
+  var input = el(inputId), clear = el(clearId), composing = false;
+  if (!input || !clear) { return ""; }
+  var initial = new URLSearchParams(location.search).get("q") || "";
+  input.value = initial;
+  function paint() { clear.hidden = !input.value; }
+  function commit() {
+    if (composing) { return; }
+    paint();
+    var url = new URL(location.href);
+    if (input.value) { url.searchParams.set("q", input.value); }
+    else { url.searchParams.delete("q"); }
+    history.replaceState(null, "", url);
+    onChange(input.value);
+  }
+  input.addEventListener("compositionstart", function () { composing = true; });
+  input.addEventListener("compositionend", function () { composing = false; commit(); });
+  input.addEventListener("input", commit);
+  input.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !event.isComposing) { input.value = ""; commit(); }
+  });
+  clear.addEventListener("click", function () { input.value = ""; composing = false; commit(); input.focus(); });
+  window.addEventListener("popstate", function () {
+    input.value = new URLSearchParams(location.search).get("q") || "";
+    paint(); onChange(input.value);
+  });
+  paint();
+  return initial;
+}
+
+(function () {
+  var path = location.pathname.replace(/\.html$/, "").replace(/\/$/, "");
+  var active = path.indexOf("intraday") !== -1 ? "intraday" : path.indexOf("quality") !== -1 ? "quality" : path.indexOf("ipo") !== -1 ? "ipo" : "overview";
+  var labels = { overview: "Overview", intraday: "Intraday desk", quality: "Quality screen", ipo: "IPO desk" };
+  document.querySelectorAll("[data-desk]").forEach(function (link) {
+    if (link.dataset.desk === active) { link.setAttribute("aria-current", "page"); }
+  });
+  text(el("desk-current"), labels[active]);
+  var skip = el("desk-skip");
+  if (skip) { skip.href = active === "overview" ? "#board" : "#main-content"; }
+  text(el("desk-date"), new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()));
+})();
 </script>
 <script>
 (function () {
   "use strict";
-
-  function num(v, digits) {
-    if (typeof v !== "number") { return "—"; }
-    return v.toFixed(digits === undefined ? 2 : digits);
+  function num(value, digits) { return typeof value === "number" && isFinite(value) ? value.toFixed(digits === undefined ? 2 : digits) : "—"; }
+  function rank(value) { return typeof value === "number" && isFinite(value) ? value : -Infinity; }
+  deskRequest("/config").then(function (cfg) { text(el("brand"), cfg.brand || "Dalal Desk"); document.title = (cfg.brand || "Dalal Desk") + " · Intraday desk"; }).catch(function () {});
+  function load() {
+    var button = el("refresh");
+    button.disabled = true; button.setAttribute("aria-busy", "true");
+    return deskLoad("/intraday", render, el("load-error")).finally(function () { button.disabled = false; button.removeAttribute("aria-busy"); });
   }
-
-  /* --- theme ----------------------------------------------------------- */
-
-
-  fetch(api("/config")).then(function (r) { return r.json(); }).then(function (cfg) {
-    text(el("brand"), cfg.brand);
-    document.title = cfg.brand + " · Intraday desk";
-  }).catch(function () {});
-
-  fetch(api("/intraday"))
-    .then(function (r) { return r.json(); })
-    .then(render)
-    .catch(function () {
-      el("picks").innerHTML = '<div class="empty">Could not reach the backend. ' +
-        'Refresh to retry.</div>';
-      el("scoreboard").innerHTML = '<div class="empty">—</div>';
-      text(el("recnote"), "offline"); text(el("picknote"), "offline");
-    });
-
+  el("refresh").addEventListener("click", load);
+  load();
   function render(book) {
-    renderScoreboard(book);
-    renderSwing(book);
     renderPicks(book);
-  }
-
-  /* The positional rules, measured on years of daily bars rather than the
-     59 sessions intraday is limited to — so this table is the better
-     evidenced of the two, and worth reading first. */
-  function renderSwing(book) {
-    var swing = book.swing || {};
-    var recs = swing.strategies || {};
-    var box = el("swingboard");
-    if (!Object.keys(recs).length) {
-      box.innerHTML = '<div class="empty">No swing record yet — run ' +
-        'backtest_swing.py.</div>';
-      text(el("swingnote"), "not measured yet");
-      return;
+    var strategies = book.strategies || {};
+    if (Object.keys(strategies).length) {
+      text(el("recnote"), (book.record_sessions ? book.record_sessions.toLocaleString("en-IN") + " stock-sessions · " : "") + (book.record_window || ""));
+      el("scoreboard").innerHTML = buildTable(strategies, "Intraday strategies ranked by expectancy");
+    } else {
+      text(el("recnote"), "Not measured yet");
+      el("scoreboard").innerHTML = '<div class="empty">' + esc(book.note || "No measured intraday record is available yet.") + '</div>';
     }
-    text(el("swingnote"),
-      (swing.symbols ? swing.symbols + " symbols · " : "") + (swing.window || ""));
-    box.innerHTML = buildTable(recs, "days");
-  }
-
-  /* --- the measured record -------------------------------------------- */
-  function renderScoreboard(book) {
-    var recs = book.strategies || {};
-    var names = Object.keys(recs);
-    var box = el("scoreboard");
-
-    if (!names.length) {
-      box.innerHTML = '<div class="empty">' +
-        esc(book.note || "No measured record yet. Run backtest_intraday.py.") +
-        '</div>';
-      text(el("recnote"), "not measured yet");
-      return;
+    var swing = book.swing || {}, records = swing.strategies || {};
+    if (Object.keys(records).length) {
+      text(el("swingnote"), (swing.symbols ? swing.symbols + " symbols · " : "") + (swing.window || ""));
+      el("swingboard").innerHTML = buildTable(records, "Swing strategies ranked by expectancy");
+    } else {
+      text(el("swingnote"), "Not measured yet");
+      el("swingboard").innerHTML = '<div class="empty">No measured swing record is available yet.</div>';
     }
-
-    text(el("recnote"),
-      (book.record_sessions ? book.record_sessions.toLocaleString("en-IN") +
-       " stock-sessions · " : "") + (book.record_window || ""));
-
-    names.sort(function (a, b) {
-      return (recs[b].expectancy_r || -99) - (recs[a].expectancy_r || -99);
-    });
-
-    var rows = names.map(function (n) {
-      var s = recs[n] || {};
-      if (!s.trades) {
-        return '<tr><td class="name">' + esc(n) + '</td>' +
-               '<td class="num" colspan="4" style="color:var(--faint)">no setups in the sample</td></tr>';
-      }
-      var exp = s.expectancy_r;
-      var cls = exp > 0.05 ? "pos" : (exp < -0.005 ? "neg" : "flat");
-      /* the scoreboard reads the raw backtest summary, which names this
-         `enough`; only the per-pick record renames it to `trusted`. */
-      var trusted = s.enough !== undefined ? s.enough : s.trusted;
-      var thin = trusted ? "" : '<span class="thin">thin</span>';
-      return '<tr>' +
-        '<td class="name">' + esc(n) + thin + '</td>' +
-        '<td class="num">' + s.trades.toLocaleString("en-IN") + '</td>' +
-        '<td class="num">' + num(s.win_rate_pct, 1) + '%</td>' +
-        '<td class="num ' + cls + '">' + (exp >= 0 ? "+" : "") + num(exp, 3) + 'R</td>' +
-        '<td class="num hide-sm">' + (s.profit_factor ? num(s.profit_factor, 2) : "—") + '</td>' +
-        '</tr>';
-    }).join("");
-
-    box.innerHTML = buildTable(recs);
   }
-
-  function buildTable(recs) {
-    var names = Object.keys(recs);
-    names.sort(function (a, b) {
-      return (recs[b].expectancy_r || -99) - (recs[a].expectancy_r || -99);
-    });
-    var rows = names.map(function (n) {
-      var s = recs[n] || {};
-      if (!s.trades) {
-        return '<tr><td class="name">' + esc(n) + '</td>' +
-               '<td class="num" colspan="4" style="color:var(--faint)">no signals in the sample</td></tr>';
-      }
-      var trusted = s.enough !== undefined ? s.enough : s.trusted;
-      var thin = trusted ? "" : '<span class="thin">thin</span>';
-      var exp = s.expectancy_r;
-      var cls = exp > 0.05 ? "pos" : (exp < -0.005 ? "neg" : "flat");
-      return '<tr>' +
-        '<td class="name">' + esc(n) + thin + '</td>' +
-        '<td class="num">' + s.trades.toLocaleString("en-IN") + '</td>' +
-        '<td class="num">' + num(s.win_rate_pct, 1) + '%</td>' +
-        '<td class="num ' + cls + '">' + (exp >= 0 ? "+" : "") + num(exp, 3) + 'R</td>' +
-        '<td class="num hide-sm">' + (s.profit_factor ? num(s.profit_factor, 2) : "—") + '</td>' +
-        '</tr>';
+  function buildTable(records, label) {
+    var names = Object.keys(records).sort(function (a, b) { return rank((records[b] || {}).expectancy_r) - rank((records[a] || {}).expectancy_r); });
+    var rows = names.map(function (name) {
+      var row = records[name] || {};
+      if (!row.trades) { return '<tr><td class="name">' + esc(name) + '</td><td colspan="4">No signals in the sample</td></tr>'; }
+      var trusted = row.enough !== undefined ? row.enough : row.trusted;
+      var expectancy = row.expectancy_r, tone = expectancy > .05 ? "pos" : expectancy < -.005 ? "neg" : "flat";
+      return '<tr><td class="name">' + esc(name) + (trusted ? '' : '<span class="thin">Thin sample</span>') + '</td>' +
+        '<td class="num">' + esc(row.trades.toLocaleString("en-IN")) + '</td>' +
+        '<td class="num">' + num(row.win_rate_pct, 1) + '%</td>' +
+        '<td class="num ' + tone + '">' + (expectancy >= 0 ? '+' : '') + num(expectancy, 3) + 'R</td>' +
+        '<td class="num">' + num(row.profit_factor) + '</td></tr>';
     }).join("");
-    return '<div class="tablewrap"><table class="scoretable"><thead><tr>' +
-        '<th>Strategy</th><th style="text-align:right">Trades</th>' +
-        '<th style="text-align:right">Win rate</th>' +
-        '<th style="text-align:right">Expectancy</th>' +
-        '<th style="text-align:right" class="hide-sm">Profit factor</th>' +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    return '<div class="table-wrap" tabindex="0" role="region" aria-label="' + esc(label) + '"><table class="scoretable"><thead><tr><th scope="col">Strategy</th><th scope="col" class="num">Trades</th><th scope="col" class="num">Win rate</th><th scope="col" class="num">Expectancy</th><th scope="col" class="num">Profit factor</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
-
-  /* --- today's setups -------------------------------------------------- */
   function renderPicks(book) {
-    var box = el("picks");
     var picks = book.picks || [];
-
-    if (book.tradeable === false && !picks.length) {
-      text(el("picknote"), "no live session");
-      box.innerHTML = '<div class="empty">' +
-        esc(book.note || "The market is not open, so there is no session to scan.") +
-        '</div>';
-      return;
-    }
     if (!picks.length) {
-      text(el("picknote"), "nothing triggered");
-      box.innerHTML = '<div class="empty">No strategy has triggered a setup ' +
-        'in this session yet.</div>';
+      text(el("picknote"), book.tradeable === false ? "No live session" : "No setups triggered");
+      el("picks").innerHTML = '<div class="empty"><strong>' + (book.tradeable === false ? 'Waiting for a live session' : 'No setups in this session') + '</strong><p>' + esc(book.note || (book.tradeable === false ? "The market is not open, so there is no session to scan." : "No strategy has triggered a setup yet. Refresh after new session data is available.")) + '</p></div>';
       return;
     }
-
-    text(el("picknote"), picks.length + " setup" + (picks.length === 1 ? "" : "s") +
-      (book.generated ? " · " + book.generated : ""));
-
-    box.innerHTML = picks.map(function (p) {
-      var r = p.record || {};
-      function cell(k, v, cls) {
-        return '<div><div class="k">' + esc(k) + '</div>' +
-               '<div class="v ' + (cls || "") + '">' + v + '</div></div>';
-      }
-      var levels =
-        cell("Entry", "₹" + num(p.entry)) +
-        cell("Stop", "₹" + num(p.stop), "stop") +
-        cell("Target", "₹" + num(p.target), "tgt") +
-        cell("Reward:risk", p.reward_risk ? num(p.reward_risk, 2) + ":1" : "—",
-             p.reward_risk ? "" : "dim") +
-        cell("VWAP", p.vwap ? "₹" + num(p.vwap) : "—", p.vwap ? "" : "dim") +
-        cell("RVOL", p.rvol ? num(p.rvol, 2) + "x" : "—", p.rvol ? "" : "dim");
-
-      var rec;
-      if (!r.trades) {
-        rec = "No measured record for this rule yet.";
-      } else if (!r.trusted) {
-        rec = "This rule has only <b>" + r.trades + "</b> trades in the sample — " +
-              "too thin to trust. " + esc(r.note || "");
-      } else {
-        rec = "<b>" + esc(p.strategy) + "</b> over <b>" +
-              r.trades.toLocaleString("en-IN") + "</b> measured trades: won <b>" +
-              num(r.win_rate_pct, 1) + "%</b>, expectancy <b>" +
-              (r.expectancy_r >= 0 ? "+" : "") + num(r.expectancy_r, 3) +
-              "R</b> per trade" +
-              (r.profit_factor ? ", profit factor <b>" + num(r.profit_factor, 2) + "</b>" : "") + ".";
-      }
-
-      return '<div class="pick">' +
-        '<div class="picktop">' +
-          '<span class="sym">' + esc(p.symbol) + '</span>' +
-          '<span class="stratchip">' + esc(p.strategy) + '</span>' +
-          '<span class="conf">' + p.confidence + '<small>/10</small></span>' +
-          '<span class="lastpx">₹' + num(p.last) + '</span>' +
-        '</div>' +
-        '<div class="subtle">' + esc(p.name || "") +
-          (p.sector ? " · " + esc(p.sector) : "") + '</div>' +
-        '<div class="levels">' + levels + '</div>' +
-        '<div class="why">' + esc(p.why) + '</div>' +
-        '<div class="rec">' + rec + '</div>' +
-        '</div>';
+    text(el("picknote"), picks.length + " setup" + (picks.length === 1 ? "" : "s") + (book.generated ? " · " + book.generated : ""));
+    el("picks").innerHTML = picks.map(function (pick) {
+      var record = pick.record || {};
+      function cell(label, value, tone) { return '<div><dt>' + esc(label) + '</dt><dd class="' + (tone || '') + '">' + value + '</dd></div>'; }
+      var levels = cell("Entry", deskMoney(pick.entry)) + cell("Stop", deskMoney(pick.stop), "stop") + cell("Target", deskMoney(pick.target), "tgt") + cell("Reward:risk", pick.reward_risk ? num(pick.reward_risk) + ":1" : "—") + cell("VWAP", deskMoney(pick.vwap)) + cell("RVOL", pick.rvol ? num(pick.rvol) + "x" : "—");
+      var evidence;
+      if (!record.trades) { evidence = "No measured record for this rule yet."; }
+      else if (!record.trusted) { evidence = 'This rule has only <b>' + esc(record.trades) + '</b> trades in the sample — too thin to trust. ' + esc(record.note || ""); }
+      else { evidence = '<b>' + esc(pick.strategy) + '</b> over <b>' + esc(record.trades.toLocaleString("en-IN")) + '</b> measured trades: won <b>' + num(record.win_rate_pct, 1) + '%</b>, expectancy <b>' + (record.expectancy_r >= 0 ? '+' : '') + num(record.expectancy_r, 3) + 'R</b> per trade' + (record.profit_factor ? ', profit factor <b>' + num(record.profit_factor) + '</b>' : '') + '.'; }
+      return '<article class="pick"><div class="picktop"><h3>' + esc(pick.symbol) + '</h3><span class="stratchip">' + esc(pick.strategy) + '</span><span class="conf">Confidence <b>' + esc(pick.confidence) + '</b>/10</span><span class="lastpx">' + deskMoney(pick.last) + '</span></div><p class="subtle">' + esc(pick.name || "") + (pick.sector ? ' · ' + esc(pick.sector) : '') + '</p><dl class="levels">' + levels + '</dl><p class="why">' + esc(pick.why) + '</p><div class="rec">' + evidence + '</div></article>';
     }).join("");
   }
 })();

@@ -1,326 +1,164 @@
 ---
 version: alpha
 name: Dalal Desk
-description: >
-  A dark, precise research terminal for Indian equities. Optimised for reading
-  numbers under time pressure, for long sessions, and for being trusted when it
-  says it does not know something.
+description: A calm research workspace for Indian equities, with clear evidence, useful context and deliberate action.
 colors:
-  # Dark is the default theme. A light set ships alongside and is one click
-  # away; both are audited to the same 4.5:1 requirement.
-  # --- surfaces, deepest to highest --------------------------------------
-  surface: "#080b12"
-  surface-container-lowest: "#0b0f16"
-  surface-container-low: "#0b0f16"
-  surface-container: "#0e1219"
-  surface-container-high: "#141924"
-  surface-container-highest: "#1b2130"
-  # --- content on surfaces ------------------------------------------------
-  on-surface: "#e9eef8"
-  on-surface-variant: "#aab6cc"
-  on-surface-muted: "#8896ae"
-  on-surface-faint: "#78859c"
-  outline: "#28303f"
-  outline-variant: "#1b2130"
-  # --- action -------------------------------------------------------------
-  primary: "#4cc9f0"
-  on-primary: "#03121a"
-  primary-container: "#0c2230"
-  on-primary-container: "#4cc9f0"
-  # --- verdict semantics --------------------------------------------------
-  buy: "#3ddc97"
-  on-buy: "#03121a"
-  buy-container: "#0d2a1f"
-  on-buy-container: "#3ddc97"
-  watch: "#f5b544"
-  on-watch: "#1a1204"
-  watch-container: "#2b2110"
-  on-watch-container: "#f5b544"
-  avoid: "#ff6b6b"
-  on-avoid: "#1a0709"
-  avoid-container: "#2c1417"
-  on-avoid-container: "#ff6b6b"
-  unavailable: "#78859c"
-  unavailable-container: "#161b24"
+  surface: "#f6f7fb"
+  surface-container: "#ffffff"
+  surface-container-low: "#f8f9fc"
+  surface-container-high: "#f0f2f8"
+  on-surface: "#222538"
+  on-surface-variant: "#4a5066"
+  on-surface-muted: "#626a80"
+  on-surface-faint: "#697187"
+  outline: "#cdd1df"
+  outline-variant: "#e5e7ef"
+  primary: "#635bce"
+  on-primary: "#ffffff"
+  primary-container: "#eeedfb"
+  buy: "#18704f"
+  buy-container: "#e8f5ee"
+  watch: "#8a5a12"
+  watch-container: "#fcf3e3"
+  avoid: "#b33f49"
+  avoid-container: "#fcecef"
 typography:
   headline-md:
-    fontFamily: Geist
-    fontSize: 17px
+    fontFamily: "Segoe UI Variable Display, Segoe UI, sans-serif"
+    fontSize: 30px
     fontWeight: "650"
-    lineHeight: 1.3
-    letterSpacing: -0.01em
-  title-sm:
-    fontFamily: Geist
-    fontSize: 14px
-    fontWeight: "640"
-    lineHeight: 1.35
-  metric-lg:
-    fontFamily: Geist
-    fontSize: 28px
-    fontWeight: "660"
-    lineHeight: 1.15
-    letterSpacing: -0.02em
-    fontFeature: "'tnum' 1, 'zero' 1"
-  metric-md:
-    fontFamily: Geist
-    fontSize: 17px
-    fontWeight: "640"
     lineHeight: 1.2
-    fontFeature: "'tnum' 1, 'zero' 1"
-  body-md:
-    fontFamily: Geist
-    fontSize: 13px
-    fontWeight: "400"
-    lineHeight: 1.45
-  label-sm:
-    fontFamily: Geist
-    fontSize: 10.5px
+    letterSpacing: -0.025em
+  title-sm:
+    fontFamily: "Segoe UI Variable Display, Segoe UI, sans-serif"
+    fontSize: 17px
     fontWeight: "650"
-    lineHeight: 1.3
-    letterSpacing: 0.06em
-  mono-sm:
-    fontFamily: ui-monospace
-    fontSize: 12px
+  body-md:
+    fontFamily: "Segoe UI, -apple-system, BlinkMacSystemFont, Helvetica Neue, sans-serif"
+    fontSize: 14px
     fontWeight: "400"
-    lineHeight: 1.65
-    fontFeature: "'tnum' 1"
+    lineHeight: 1.55
+  label-sm:
+    fontFamily: "Segoe UI, sans-serif"
+    fontSize: 12px
+    fontWeight: "550"
+  metric-lg:
+    fontFamily: "Segoe UI Variable Display, Segoe UI, sans-serif"
+    fontSize: 29px
+    fontWeight: "650"
+    lineHeight: 1.2
+  mono-sm:
+    fontFamily: "ui-monospace, Consolas, monospace"
+    fontSize: 12px
+    lineHeight: 1.7
 spacing:
-  xs: 6px
-  sm: 10px
-  md: 14px
-  lg: 18px
-  xl: 26px
+  sm: 8px
+  md: 16px
+  lg: 24px
 rounded:
-  sm: 5px
-  md: 10px
-  lg: 14px
-  full: 999px
+  control: 8px
+  card: 14px
 components:
   card:
-    background: "{colors.surface-container-lowest}"
-    border: "{colors.outline-variant}"
-    radius: "{rounded.lg}"
-    padding: "{spacing.lg}"
-  nested-panel:
-    background: "{colors.surface-container-low}"
-    border: "{colors.outline-variant}"
-    radius: "{rounded.md}"
-  metric:
-    label: "{typography.label-sm}"
-    labelColor: "{colors.on-surface-faint}"
-    value: "{typography.metric-lg}"
-    valueColor: "{colors.on-surface}"
+    backgroundColor: "{colors.surface-container}"
+    textColor: "{colors.on-surface}"
+    rounded: "{rounded.card}"
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    rounded: "{rounded.control}"
   badge:
     typography: "{typography.label-sm}"
-    radius: "{rounded.full}"
-  log:
-    typography: "{typography.mono-sm}"
-    background: "{colors.surface-container-lowest}"
-omitted:
-  - section: Elevation & Depth
-    reason: >
-      Depth is carried by a single hairline border and one near-invisible
-      shadow. A dashboard read for hours should not have layers competing for
-      attention, so there is no elevation scale to define.
+    rounded: 6px
+  badge-buy:
+    backgroundColor: "{colors.buy-container}"
+    textColor: "{colors.buy}"
+  badge-watch:
+    backgroundColor: "{colors.watch-container}"
+    textColor: "{colors.watch}"
+  badge-avoid:
+    backgroundColor: "{colors.avoid-container}"
+    textColor: "{colors.avoid}"
+  label:
+    textColor: "{colors.on-surface-muted}"
+    typography: "{typography.label-sm}"
+  caption:
+    textColor: "{colors.on-surface-faint}"
 ---
 
 # Dalal Desk
 
-## Brand & Style
+## Overview
 
-This is a research terminal, not a trading app. Its job is to present evidence
-and a verdict, make the reasoning inspectable, and be unambiguous about what it
-does not know. Every visual decision follows from that.
+This is an operating workspace for equity research. The user-authorized full redesign replaces the previous dark cyan terminal with a quiet, light research notebook: persistent navigation, a clear analysis toolbar, readable numbers and an evidence-first page order. The signature is the relationship between verdicts and their research conditions: conclusions occupy the main column while the track record, confidence, paper capital and the agent panel remain beside them.
 
-The register is a dark instrument panel: deep near-black surfaces, hairline
-borders, a faint engineering grid, and a single cyan accent. Colour is almost
-absent except where it carries meaning. Nothing pulses, glows or animates
-unless it is reporting live state.
-
-Dark is the default because this is read for hours, often before sunrise, and
-because a dark ground gives *more* contrast headroom than a light one — every
-token here clears 4.5:1 with room to spare, where the light palette had to be
-tuned to reach it. The light theme ships alongside, one click away, and the
-choice is remembered.
-
-The emotional target is **calm competence under time pressure**. A user opens
-this at 09:00 with fifteen minutes before the bell. They need to find the
-number they are looking for immediately and trust it. Excitement is the wrong
-feeling for an interface that is often telling you to do nothing.
-
-Two consequences worth stating up front, because they rule out most of what is
-fashionable in dashboard design:
-
-- **Legibility outranks atmosphere.** Glass, blur and translucency all reduce
-  the contrast of text sitting on them. On a screen whose entire purpose is
-  small numbers — ₹1,403.00, 2.6x, −1.87% — that trade is never worth making.
-  Gradients appear in exactly three places (the logo mark, the primary button,
-  and one fixed wash behind the header) and never behind text.
-- **Density outranks drama.** Oversized display type is a poster technique. A
-  verdict row here carries two verdicts, two confidences, six price levels and
-  a rationale. Space spent on a 84px headline is space taken from evidence.
+The product must never imply execution, guaranteed returns or validated research where evidence is missing. Read PRODUCT.md for product facts and UX-CONTRACT.md for observable behavior.
 
 ## Colors
 
-The palette is deliberately small. Grey does the structural work; colour is
-reserved almost entirely for **verdict semantics**, so that a spot of green or
-red always means something specific.
+Runtime CSS is canonical (Model B). shared_styles.css defines all shared tokens and both themes. This file mirrors the accepted light values; page-specific CSS consumes variables instead of maintaining separate palettes. page_render.py inlines shared styles into both Flask responses and build_web.py outputs.
 
-- **Surfaces** run from the page field (`surface`) up through white cards
-  (`surface-container-lowest`) to the tinted panels used for nested content
-  (`surface-container-low`) and table headers (`surface-container`). The
-  ordering matters: a track panel sits *inside* a verdict card, and the tiers
-  keep that nesting readable without adding a second border weight.
-- **Verdict colours** are the only saturated hues in normal use: green for BUY,
-  amber for WATCH, red for AVOID, and a deliberately colourless grey for
-  UNAVAILABLE. Each has a `-container` pair for the badge background.
-- **Primary** is used for exactly two things: the Start button, and the
-  working state of an agent. It is not a decorative accent.
+| Documentation role | Runtime variable | Consumers |
+|---|---|---|
+| surface / containers | --bg, --card, --card-low, --card-high | App canvas, cards, tables |
+| on-surface / variant / muted / faint | --ink, --ink-2, --muted, --faint | Headings, evidence, supporting text |
+| primary / on-primary / container | --accent, --on-accent, --accent-soft | Actions, active desk, top pick |
+| buy / watch / avoid | --green, --amber, --red and -soft variants | Written verdicts, critical caveats |
+| outline / outline-variant | --border-strong / --border | Inputs / structural borders |
+| spacing sm / md / lg | --space-sm / --space-md / --space-lg | Shared rhythm: 8 / 16 / 24 px |
+| rounded control / card | --radius-control / --radius | Controls / panels |
 
-Every foreground/background pair in this file meets **WCAG AA (4.5:1)** for
-body text. That is a hard requirement, not an aspiration — an audit of the
-first palette found `on-surface-faint` at **2.63:1**, and it was being used for
-KPI labels, agent stat labels and the trigger/invalidation/objective price
-levels. Numbers a user might act on were the least legible text on the page.
+Light is the new-visit default for the daytime research workflow. Previously saved light/dark preferences are respected. Dark mode uses slate surfaces (#141720 canvas, #1e2330 cards), lavender action (#b2a9ff), pale content (#f0f1fa), and corresponding readable verdict colors. The semantic hierarchy does not change between themes. The theme applies inline before first paint.
+
+No gradients, glass, grain or ambient effects. Color means action, navigation, a verdict or a genuine warning. Missing Telegram delivery is neutral context; data failure and concentration warnings remain prominent.
 
 ## Typography
 
-One family, Geist, with a system fallback stack. Size and weight carry the
-hierarchy; there are no decorative faces.
+The display and body roles use the platform Segoe/system families deliberately: an offline-capable research tool should not fetch a font before it can render its data. Display uses the variable display face where installed and equivalent native fallbacks elsewhere. Metrics use tabular numerals. Logs alone use monospace. There are no remote font requests or font-swap layout shifts.
 
-Labels are small, uppercase and widely tracked (0.09-0.13em). At 9.5-10.5px
-that tracking is what keeps them legible rather than decorative, and it is what
-makes the interface read as an instrument rather than a web page.
+Page headings are 30px, section headings 17px, body/evidence 12–14px, and supporting labels 10–12px. Narrow headings become 27px. Avoid decorative uppercase tracking. All important prices retain their currency and Indian grouping; unknown values remain a dash.
 
-The important rule is **tabular numerals**. Every metric, price and percentage
-uses `font-feature-settings: 'tnum' 1`, so that digits occupy identical width.
-Without it, a column of prices visibly jitters as it updates on each poll,
-which reads as instability in the data rather than in the font.
+## Layout
 
-The face changed from Inter to Geist, for two reasons. Inter is the default
-choice to the point of being a fingerprint, and Geist keeps the technical
-register while having more of its own character. The more embarrassing reason
-is that Inter was named here and never actually loaded: the stylesheet listed
-it in a fallback stack behind `-apple-system` and `Segoe UI`, so on Windows
-this terminal had been rendering in Segoe UI the whole time. The spec and the
-screen now agree, and the font is loaded rather than hoped for.
+A 220px sidebar (194px at compact laptop sizes), a quiet 78px context bar, and a naturally scrolling content area. The content has 36px desktop margins, 24px tablet margins and 16px phone margins. At 900px the sidebar becomes four visible navigation items above the content, avoiding a hidden menu for four destinations.
 
-`label-sm` is uppercase with wide tracking and is used for every field label —
-KPI captions, agent stat names, track names, table headers. It should never be
-used for a value.
+Overview order: page identity and session; explicit start controls; analysis summary; verdict search/results plus research context; optional run details; additional sector and order-book evidence. There is one primary action, Start analysis. The result feed renders at most twelve matches before Load more.
 
-## Layout & Spacing
+The main split uses a flexible verdict column and a 304px context column. It becomes a single column at 1000px. Two horizons sit side by side when readable and stack at compact widths. Mobile metrics retain a two-column scan pattern.
 
-A single centred column, max 1180px, on a 4px-derived spacing scale.
+Secondary desks use the same navigation, titles, controls and surface language. They promote current setups, screening criteria/matches, and the issue calendar respectively. Methodology uses native disclosures, while critical evidence limitations remain visible. Strategy tables scroll within their own region; the page does not hide overflow or trap document scrolling.
 
-The page is ordered by decreasing urgency:
+## Elevation & Depth
 
-1. **Header** — brand, market phase, controls. The phase chip is here because
-   everything below it means something different depending on whether the
-   session is live.
-2. **KPI row** — four numbers that answer "what happened in this run".
-3. **Status strip** — track record, calibration, regime, capital, next run.
-   These are context, deliberately smaller than the KPIs.
-4. **The panel** — eight agent cards, in pipeline order.
-5. **Screens and heatmap** — order book, sector heatmap.
-6. **Verdict feed** — the actual output, newest first.
-7. **Run log** — collapsed by default.
-
-Verdict cards are the densest element and get the most internal air: a header
-line, then two side-by-side track panels that collapse to stacked on narrow
-screens.
+Panels use a single subtle border, not shadows. The app canvas and white/slate cards provide separation. The active desk and top research pick use the accent container. Focus uses a visible 3px outline; it is not decorative elevation.
 
 ## Shapes
 
-Rounded rectangles throughout, on a 5/10/14px scale. Cards get `lg`, nested
-panels `md`, badges `full`. Nothing is a circle except status dots.
-
-Borders are always 1px and always `outline-variant`, except for the controls
-row which uses the heavier `outline` to signal interactivity.
+14px cards, 8px controls, 6px verdict badges, and small circular status dots. Icons share a 1.7–1.8px outline vocabulary. No emoji or pictorial SVG illustrations.
 
 ## Components
 
-**Card** — white, 1px `outline-variant`, `lg` radius, one very soft shadow.
-The shadow exists to lift the card off the grey field, not to suggest height.
+Shared shell: shared_shell.html. Tokens, controls, panels, status, search and responsive rules: shared_styles.css. Theme, checked requests, shared loading/retry, local list search and money formatting: shared_desk.js. Inline page scripts own only the research-specific renderers and the overview's polling/combined filter state.
 
-**Metric** — a `label-sm` caption above a `metric-lg` value. Values are
-tabular. A missing value renders as `—`, never as `0` or a blank.
+Native select popups are explicitly platform-owned. Dates are formatted using en-IN and Asia/Kolkata. No authored menu, calendar or modal is required by these workflows.
 
-**Badge** — a pill in a verdict container colour. Verdict is *never* conveyed
-by colour alone; the badge always carries the word BUY / WATCH / AVOID /
-UNAVAILABLE.
-
-**Track panel** — one per horizon inside a verdict card, tinted by verdict.
-Carries the badge, confidence, horizon, rationale, levels, and any gate that
-fired.
-
-**Gate chip** — amber, for a verdict held back by a desk rule. This is a
-first-class component because "we would have said BUY but the regime filter
-stopped it" is one of the most important things the app can tell you.
-
-**Status dot** — grey when offline, primary and pulsing while working, green
-when done. The pulse is the only ambient animation in the product and it is
-reporting real state.
-
-## Motion
-
-Motion answers three questions and nothing else: *what changed*, *what is
-working*, and *what just arrived*.
-
-| Animation | What it reports |
-|---|---|
-| staggered rise on load | page structure, one pass, never on re-render |
-| hairline draw across KPI cards | the board has initialised |
-| **scan line** across an agent card | that agent is working right now |
-| pulsing status dot | live state: working (accent) or done (green) |
-| equaliser bars | the working agent is active, not hung |
-| **flash on a value** | that number just changed |
-| slide-in on a verdict row | a new verdict arrived |
-| sweep across the Start button | a run is in flight and the button is locked |
-| sheen on the logo mark | idle brand detail, 6s cycle, the one exception |
-| spinner | a request is pending |
-
-Two rules govern all of it:
-
-- **A flash only fires on a genuine change.** The first render seeds the value
-  silently. Flashing on every poll would train the eye to ignore the flash,
-  which destroys the only thing it is for.
-- **`prefers-reduced-motion` disables everything.** All of it is polish over a
-  fully legible static page, so honouring the OS setting costs nothing.
-
-Theme switching is deliberately *not* animated. Beyond reading as lag, a
-transition on a property fed by a custom property that just changed leaves the
-computed value stuck at the old one — the page stayed dark while every other
-token flipped to light.
+Animations communicate actual work: a small pending spinner and a brief changed-value color. No entrance choreography, hover lift or pulsing idle decoration. Reduced motion removes animations and transitions. The global scrollbar baseline applies to all owned scroll regions, has visible hover/active colors, and falls back under forced colors.
 
 ## Do's and Don'ts
 
-**Do** use `—` for a value that does not exist, and put the reason nearby. A
-blank cell is indistinguishable from a bug; a dash plus a stated reason is the
-whole trust model of this app.
+- Keep evidence, risk gates, unavailable data and all original analytical safeguards intact.
+- Use text and color together for verdicts. Never style an unavailable metric as zero.
+- Keep results visible on a failed refresh, show retry in place and prevent duplicate starts.
+- Preserve navigation and main controls before any backend is available.
+- Do not add remote assets, a framework or a build dependency for visual effects.
+- Do not move backend setup details into the main user flow; keep them with engine/run details and documentation.
 
-**Do** keep verdict colour and verdict word together. A red-green colourblind
-user must lose nothing.
+## Redesign reconciliation
 
-**Do** use tabular numerals for anything that updates on a poll.
-
-**Do** surface gates and suppressions rather than hiding them. A signal that
-was blocked is more informative than one that never appeared.
-
-**Don't** introduce glass, blur, or translucent surfaces. They cost contrast
-on the one thing this interface exists to show.
-
-**Don't** add a second accent colour. Every additional hue makes the verdict
-palette mean less.
-
-**Don't** animate anything that is not reporting live state. Decorative motion
-in a financial interface reads as the data moving. Every animation in the
-product is listed under Motion; if a new one does not fit that list, it does
-not belong.
-
-**Don't** use `on-surface-faint` for numbers a user might act on. It is for
-labels. Levels, prices and percentages belong in `on-surface-variant` or
-darker.
-
-**Don't** grow the type scale to fill space. If a section looks empty, it
-usually means the evidence is thin — which is worth showing, not padding.
+| Previous system | Authorized change | Implementation |
+|---|---|---|
+| Dark cyan terminal and duplicated tokens | Light-first lavender research workspace with remembered dark mode | One shared_styles.css |
+| Desks and start controls mixed in the header | Persistent desk navigation plus explicit scan toolbar | Shared shell and overview scan panel |
+| Agent board before research results | Verdicts lead, context and agents alongside | Overview workspace grid |
+| Repeated animation and 500ms continuous polling | Pending-only motion; 1s running / 10s idle; hidden-tab pause | Shared CSS and dashboard polling |
+| Repeated styles and no durable behavioral contract | Shared primitives with documented owners | UX-CONTRACT.md and page_render.py |

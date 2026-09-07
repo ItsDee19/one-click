@@ -16,3 +16,6 @@ backtest_5y.json
 .drhp_cache/
 quality_screen.json
 .quality_screen_progress.json
+
+# local static audit evidence (machine-specific paths)
+tests/premium-audit.json

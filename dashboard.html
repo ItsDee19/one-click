@@ -1,916 +1,72 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="Dalal Desk — a research terminal for Indian equities. Eight agents screen the exchange, argue each pick, and report what they cannot verify." />
-<meta name="theme-color" content="#080b12" />
-<meta property="og:title" content="Dalal Desk" />
-<meta property="og:description" content="A research terminal for Indian equities. Analysis only — it never places an order." />
-<meta property="og:type" content="website" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 32 32&quot;%3E%3Crect width=&quot;32&quot; height=&quot;32&quot; rx=&quot;7&quot; fill=&quot;%234cc9f0&quot;/%3E%3Cpath d=&quot;M7 21l5-6 4 3.5L25 10&quot; fill=&quot;none&quot; stroke=&quot;%2303121a&quot; stroke-width=&quot;2.6&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/%3E%3C/svg%3E" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" />
-<title>Agent desk · Indian stock analysis</title>
-<style>
-  /* ======================================================================
-     Dalal Desk — tokens generated from DESIGN.md.
-     Dark is the default: this is a terminal read for hours, and every token
-     below is contrast-audited against all three surface tiers.
-     ====================================================================== */
-  :root,
-  [data-theme="dark"]{
-    --bg:#080b12;
-    --bg-elev:#0a0e16;
-    --card:#0e1219;            /* 16.13:1 for --ink */
-    --card-low:#0b0f16;
-    --card-high:#141924;
-    --border:#1b2130;
-    --border-strong:#28303f;
-    --ink:#e9eef8;             /* 16.13:1 */
-    --ink-2:#aab6cc;           /*  9.18:1 */
-    --muted:#8896ae;           /*  6.27:1 */
-    --faint:#78859c;           /*  5.03:1 — labels only */
-    --accent:#4cc9f0;          /*  9.76:1 */
-    --accent-soft:#0c2230;
-    --accent-glow:76,201,240;
-    --green:#3ddc97;           /* 10.62:1 */
-    --green-soft:#0d2a1f;
-    --amber:#f5b544;           /* 10.34:1 */
-    --amber-soft:#2b2110;
-    --red:#ff6b6b;             /*  6.76:1 */
-    --red-soft:#2c1417;
-    --unavailable-soft:#161b24;
-    --grid:rgba(255,255,255,.022);
-    --shadow:0 1px 0 rgba(255,255,255,.035) inset,
-             0 1px 2px rgba(4,8,16,.5),
-             0 18px 40px -26px rgba(6,12,26,.95);
-    --radius:14px;
-  }
-
-  [data-theme="light"]{
-    --bg:#f5f6f8;
-    --bg-elev:#ffffff;
-    --card:#ffffff;
-    --card-low:#fcfcfd;
-    --card-high:#fafbfc;
-    --border:#e5e7ec;
-    --border-strong:#d6d9e0;
-    --ink:#111520;
-    --ink-2:#3d4451;
-    --muted:#5d6573;
-    --faint:#646c7b;
-    --accent:#2b62ee;
-    --accent-soft:#eef3ff;
-    --accent-glow:43,98,238;
-    --green:#0f7a4d;
-    --green-soft:#e9f6ef;
-    --amber:#94620a;
-    --amber-soft:#fdf3e0;
-    --red:#b02a20;
-    --red-soft:#fdeeec;
-    --unavailable-soft:#f0f1f4;
-    --grid:rgba(17,21,32,.025);
-    --shadow:0 1px 2px rgba(17,21,32,.05), 0 10px 28px -22px rgba(17,21,32,.45);
-  }
-
-  /* Motion is opt-out at the OS level. Everything below animates state, not
-     decoration, so disabling it costs nothing but the polish. */
-  @media (prefers-reduced-motion: reduce){
-    *,*::before,*::after{
-      animation-duration:.001ms !important;animation-iteration-count:1 !important;
-      transition-duration:.001ms !important;scroll-behavior:auto !important;
-    }
-  }
-
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
-  body{
-    background-color:var(--bg);
-    color:var(--ink);
-    font:15px/1.5 Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-variant-numeric:tabular-nums;
-    text-wrap:pretty;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-    /* Deliberately NOT transitioned. Transitioning a property whose value
-       comes from a custom property that just changed leaves the computed
-       value stuck at the old one — the page stayed dark while every other
-       token flipped to light. A theme switch should be instant regardless;
-       a 400ms fade of the whole background only reads as lag. */
-    /* a faint engineering grid: structure without decoration */
-    background-image:
-      linear-gradient(var(--grid) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-    background-size:56px 56px, 56px 56px;
-  }
-  .wrap{max-width:1200px;margin:0 auto;padding:26px 24px 72px;position:relative;}
-
-  /* a single wash of accent behind the fold, fixed so it never scrolls */
-  body::before{
-    content:"";position:fixed;inset:0 0 auto 0;height:340px;pointer-events:none;
-    background-image:radial-gradient(60% 100% at 50% 0%,
-      rgba(var(--accent-glow),.07), transparent 70%);
-    z-index:0;
-  }
-  .wrap > *{position:relative;z-index:1;}
-
-  /* Grain, fixed and non-interactive. Flat vector surfaces read as sterile
-     and this is the smallest amount of texture that fixes it — but it sits
-     *behind* the content, not over it. Laid on top at 3.2% it dropped the
-     --faint token from 5.03:1 to 4.43:1, under the 4.5:1 floor DESIGN.md
-     treats as non-negotiable. Same rule as the gradients: never behind text. */
-  body::after{
-    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-
-  ::selection{background-color:rgba(var(--accent-glow),.28);}
-
-  /* ---------------- entrance ---------------- */
-  /* Sections arrive in reading order. One pass on load, never on re-render. */
-  @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
-  .enter{animation:rise .5s cubic-bezier(.2,.7,.3,1) both;}
-  .d1{animation-delay:.04s;} .d2{animation-delay:.09s;} .d3{animation-delay:.14s;}
-  .d4{animation-delay:.19s;} .d5{animation-delay:.24s;}
-
-  /* ---------------- header ---------------- */
-  header{
-    display:flex;align-items:center;justify-content:space-between;gap:24px;
-    flex-wrap:wrap;margin-bottom:22px;
-  }
-  .brandline{display:flex;align-items:center;gap:13px;min-width:0;}
-  .mark{
-    width:40px;height:40px;border-radius:12px;flex:none;
-    background-image:linear-gradient(140deg, var(--accent), rgba(var(--accent-glow),.55));
-    color:#03121a;display:grid;place-items:center;
-    box-shadow:0 0 0 1px rgba(var(--accent-glow),.35),
-               0 10px 30px -12px rgba(var(--accent-glow),.8);
-    position:relative;overflow:hidden;
-  }
-  .mark svg{position:relative;z-index:1;}
-  .mark::after{
-    content:"";position:absolute;inset:0;
-    background-image:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.5) 50%,transparent 60%);
-    transform:translateX(-120%);animation:sheen 6s ease-in-out infinite;
-  }
-  @keyframes sheen{0%,72%{transform:translateX(-120%);}88%,100%{transform:translateX(120%);}}
-
-  .brandtext{min-width:0;}
-  .brandtext h1{
-    margin:0;font-size:17.5px;font-weight:650;letter-spacing:-.015em;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .brandtext h1 .sep{color:var(--faint);font-weight:400;margin:0 8px;}
-  .brandtext h1 .light{color:var(--muted);font-weight:450;}
-  .brandtext p{
-    margin:3px 0 0;font-size:12px;color:var(--muted);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62ch;
-  }
-
-  .controls{display:flex;align-items:center;gap:9px;}
-
-  select,input[type=number],button.ghost{
-    border:1px solid var(--border-strong);border-radius:10px;
-    background-color:var(--card);color:var(--ink-2);
-    padding:9px 12px;font:inherit;font-size:13px;
-    transition:border-color .18s ease, background-color .18s ease, color .18s ease;
-  }
-  select{
-    appearance:none;padding-right:30px;cursor:pointer;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%238896ae' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-    background-repeat:no-repeat;background-position:right 10px center;
-  }
-  input[type=number]{width:132px;font-variant-numeric:tabular-nums;}
-  input[type=number]::placeholder{color:var(--faint);}
-  select:hover,input[type=number]:hover,button.ghost:hover{border-color:var(--accent);}
-  select:focus-visible,button:focus-visible,input:focus-visible{
-    outline:2px solid var(--accent);outline-offset:2px;
-  }
-
-  button.ghost{cursor:pointer;width:38px;padding:9px 0;display:grid;place-items:center;}
-  button.ghost:hover{color:var(--accent);}
-  /* Pressed feedback. Without it a click has no physical acknowledgement and
-     the button feels like a picture of a button. */
-  button.ghost:active,.navlink:active{transform:translateY(1px);}
-  button.primary:active{transform:scale(.985);}
-  select:active,input[type=number]:active{transform:none;}
-
-  /* A text+icon link out to another page. Deliberately its own class rather
-     than reusing .ghost: every ghost rule above is qualified as button.ghost,
-     so an <a> matches none of them and falls back to the UA link blue —
-     2.09:1 on this background, and 1.79:1 once visited. */
-  .navlink{
-    display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
-    border:1px solid var(--border-strong);border-radius:10px;
-    background-color:var(--card);color:var(--ink-2);
-    padding:9px 14px;font:inherit;font-size:13px;font-weight:600;
-    text-decoration:none;
-    transition:border-color .18s ease, background-color .18s ease, color .18s ease;
-  }
-  .navlink:hover{border-color:var(--accent);color:var(--accent);}
-  .navlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-  .navlink svg{flex:none;}
-
-  .onlybuys{
-    display:inline-flex;align-items:center;gap:7px;cursor:pointer;
-    font-size:11.5px;color:var(--muted);user-select:none;white-space:nowrap;
-  }
-  .onlybuys input{accent-color:var(--accent);margin:0;cursor:pointer;}
-
-  /* Visible only once focused, which is the only time it is useful. */
-  .skip{
-    position:absolute;left:-9999px;top:8px;z-index:10;
-    background-color:var(--card);color:var(--ink);border:1px solid var(--accent);
-    border-radius:9px;padding:10px 16px;font-size:13px;font-weight:600;
-    text-decoration:none;
-  }
-  .skip:focus{left:16px;}
-  .onlybuys:hover{color:var(--ink-2);}
-
-  button.primary{
-    position:relative;overflow:hidden;
-    border:0;border-radius:10px;cursor:pointer;
-    background-color:transparent;
-    background-image:linear-gradient(135deg,var(--accent),rgba(var(--accent-glow),.72));
-    color:#03121a;padding:10px 22px;font:inherit;font-size:14px;font-weight:650;
-    letter-spacing:.01em;
-    box-shadow:0 10px 26px -12px rgba(var(--accent-glow),.95);
-    transition:transform .12s cubic-bezier(.2,.7,.3,1), box-shadow .2s ease, filter .2s ease;
-    display:flex;align-items:center;gap:9px;
-  }
-  button.primary:hover:not(:disabled){
-    transform:translateY(-1px);filter:brightness(1.08);
-    box-shadow:0 14px 32px -12px rgba(var(--accent-glow),1);
-  }
-  button.primary:active:not(:disabled){transform:translateY(1px);}
-  button.primary:disabled{
-    background-color:var(--card-high);color:var(--faint);box-shadow:none;cursor:not-allowed;
-  }
-  /* light sweeps across the button only while a run is in flight */
-  button.primary:disabled::after{
-    content:"";position:absolute;inset:0;
-    background-image:linear-gradient(100deg,transparent 35%,rgba(var(--accent-glow),.16) 50%,transparent 65%);
-    transform:translateX(-100%);animation:sweep 1.6s linear infinite;
-  }
-  @keyframes sweep{to{transform:translateX(100%);}}
-
-  .spinner{
-    width:13px;height:13px;border-radius:50%;flex:none;
-    border:2px solid rgba(0,0,0,.18);border-top-color:currentColor;
-    animation:spin .7s linear infinite;
-  }
-  @keyframes spin{to{transform:rotate(360deg);}}
-
-  /* ---------------- kpis ---------------- */
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px;}
-  .kpi{
-    position:relative;overflow:hidden;
-    background-color:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-    padding:15px 17px;box-shadow:var(--shadow);
-    transition:border-color .25s ease, transform .25s cubic-bezier(.2,.7,.3,1);
-  }
-  .kpi:hover{transform:translateY(-2px);border-color:var(--border-strong);}
-  /* a hairline of accent that draws itself in on load */
-  .kpi::before{
-    content:"";position:absolute;top:0;left:0;height:1px;width:100%;
-    background-image:linear-gradient(90deg,transparent,rgba(var(--accent-glow),.55),transparent);
-    transform:scaleX(0);transform-origin:left;
-    animation:draw .9s cubic-bezier(.2,.7,.3,1) forwards;
-  }
-  @keyframes draw{to{transform:scaleX(1);}}
-  .kpi .label{
-    font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
-    color:var(--faint);font-weight:650;
-  }
-  .kpi .value{
-    font-size:30px;font-weight:640;letter-spacing:-.025em;margin-top:7px;line-height:1.1;
-    font-variant-numeric:tabular-nums;
-  }
-  .kpi .value small{font-size:14px;font-weight:550;color:var(--muted);margin-left:5px;letter-spacing:0;}
-  .kpi .sub{font-size:11.5px;color:var(--muted);margin-top:4px;}
-  /* a value that just changed briefly lifts — the eye catches the delta */
-  .flash{animation:flash .7s ease;}
-  @keyframes flash{
-    0%{color:var(--accent);text-shadow:0 0 18px rgba(var(--accent-glow),.55);}
-    100%{color:inherit;text-shadow:none;}
-  }
-
-  /* ---------------- status strip ---------------- */
-  .strip{
-    display:flex;gap:0;flex-wrap:wrap;margin:0 0 22px;
-    background-color:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-    padding:4px 6px;box-shadow:var(--shadow);
-  }
-  .stripitem{
-    display:flex;align-items:baseline;gap:9px;min-width:0;
-    padding:9px 14px;border-radius:9px;transition:background-color .2s ease;
-  }
-  .stripitem:hover{background-color:var(--card-high);}
-  .stripitem .k{
-    font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--faint);font-weight:700;white-space:nowrap;
-  }
-  .stripitem .v{font-size:12.5px;color:var(--ink-2);font-weight:550;}
-  .stripitem .v.none{color:var(--faint);font-weight:450;}
-
-  /* ---------------- section headings ---------------- */
-  .sechead{
-    display:flex;align-items:baseline;justify-content:space-between;
-    margin:0 2px 12px;gap:16px;
-  }
-  .sechead h2{
-    margin:0;font-size:11px;font-weight:700;letter-spacing:.13em;
-    text-transform:uppercase;color:var(--muted);
-    display:flex;align-items:center;gap:10px;
-  }
-  .sechead h2::after{
-    content:"";height:1px;width:52px;
-    background-image:linear-gradient(90deg,var(--border-strong),transparent);
-  }
-  .sechead .note{font-size:12px;color:var(--muted);}
-
-  /* ---------------- agents ---------------- */
-  .agents{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:26px;}
-  .agent{
-    position:relative;overflow:hidden;
-    background-color:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-    padding:15px 16px 13px;box-shadow:var(--shadow);
-    transition:border-color .3s ease, transform .3s cubic-bezier(.2,.7,.3,1),
-               box-shadow .3s ease;
-  }
-  .agent:hover{transform:translateY(-2px);}
-  .agent.working{
-    border-color:rgba(var(--accent-glow),.5);
-    box-shadow:var(--shadow), 0 0 0 1px rgba(var(--accent-glow),.18),
-               0 0 34px -16px rgba(var(--accent-glow),.9);
-  }
-  /* a scan line crosses a working agent, and only a working agent */
-  .agent.working::after{
-    content:"";position:absolute;left:0;right:0;top:0;height:1px;
-    background-image:linear-gradient(90deg,transparent,var(--accent),transparent);
-    animation:scan 2.1s cubic-bezier(.4,0,.6,1) infinite;
-  }
-  @keyframes scan{0%{top:0;opacity:0;}12%{opacity:1;}88%{opacity:1;}100%{top:100%;opacity:0;}}
-  .agent.done{border-color:rgba(61,220,151,.28);}
-
-  .agent .top{display:flex;align-items:center;gap:10px;}
-  .agent .icon{
-    width:32px;height:32px;border-radius:9px;flex:none;display:grid;place-items:center;
-    background-color:var(--card-high);color:var(--muted);
-    transition:background-color .3s ease,color .3s ease,transform .3s cubic-bezier(.2,.7,.3,1);
-  }
-  .agent.working .icon{
-    background-color:var(--accent-soft);color:var(--accent);transform:scale(1.06);
-  }
-  .agent.done .icon{background-color:var(--green-soft);color:var(--green);}
-  .agent .name{font-size:14px;font-weight:640;letter-spacing:-.005em;}
-  .agent .role{
-    font-size:12px;color:var(--muted);margin:9px 0 11px;min-height:32px;line-height:1.35;
-  }
-  .status{
-    margin-left:auto;display:flex;align-items:center;gap:6px;
-    font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--faint);
-  }
-  .agent.working .status{color:var(--accent);}
-  .agent.done .status{color:var(--green);}
-  .dot{width:6px;height:6px;border-radius:50%;background-color:var(--faint);flex:none;}
-  .agent.working .dot{background-color:var(--accent);animation:pulse 1.4s ease-in-out infinite;}
-  .agent.done .dot{background-color:var(--green);box-shadow:0 0 10px -1px var(--green);}
-  @keyframes pulse{
-    0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(var(--accent-glow),.55);}
-    50%{opacity:.5;box-shadow:0 0 0 6px rgba(var(--accent-glow),0);}
-  }
-
-  .bars{display:none;align-items:flex-end;gap:2px;height:11px;}
-  .agent.working .bars{display:flex;}
-  .bars i{
-    width:2px;background-color:var(--accent);border-radius:1px;opacity:.85;
-    animation:bar .9s ease-in-out infinite;
-  }
-  .bars i:nth-child(1){height:40%;animation-delay:0s;}
-  .bars i:nth-child(2){height:75%;animation-delay:.12s;}
-  .bars i:nth-child(3){height:55%;animation-delay:.24s;}
-  .bars i:nth-child(4){height:90%;animation-delay:.36s;}
-  @keyframes bar{0%,100%{transform:scaleY(.35);}50%{transform:scaleY(1);}}
-
-  .stats{
-    display:grid;grid-template-columns:1fr 1fr;gap:10px;
-    border-top:1px solid var(--border);padding-top:11px;
-  }
-  .stat .k{
-    font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
-    color:var(--faint);font-weight:650;
-  }
-  .stat .v{
-    font-size:17px;font-weight:640;letter-spacing:-.015em;margin-top:2px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    font-variant-numeric:tabular-nums;
-  }
-  .stat .v.small{font-size:12px;font-weight:600;color:var(--ink-2);padding-top:4px;}
-
-  /* ---------------- verdict feed ---------------- */
-  .feed{
-    background-color:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-    box-shadow:var(--shadow);overflow:hidden;
-  }
-  .row{
-    padding:15px 18px;border-top:1px solid var(--border);
-    animation:slidein .45s cubic-bezier(.2,.7,.3,1) both;
-    transition:background-color .2s ease;
-  }
-  .row:first-child{border-top:0;}
-  .row:hover{background-color:var(--card-low);}
-  @keyframes slidein{
-    from{opacity:0;transform:translateY(-8px);}
-    to{opacity:1;transform:none;}
-  }
-  .rowtop{display:flex;align-items:baseline;gap:12px;margin-bottom:11px;}
-  .rowtop .px{margin-left:auto;text-align:right;display:flex;gap:10px;align-items:baseline;}
-
-  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
-  .track{
-    position:relative;
-    border:1px solid var(--border);border-radius:11px;padding:11px 13px;
-    background-color:var(--card-low);
-    transition:border-color .25s ease;
-  }
-  /* verdict is carried by a bar as well as the badge word — never colour alone */
-  .track::before{
-    content:"";position:absolute;left:0;top:11px;bottom:11px;width:2px;
-    border-radius:2px;background-color:var(--border-strong);
-  }
-  .track.BUY{border-color:rgba(61,220,151,.3);}
-  .track.BUY::before{background-color:var(--green);box-shadow:0 0 12px -2px var(--green);}
-  .track.WATCH::before{background-color:var(--amber);}
-  .track.AVOID{border-color:rgba(255,107,107,.26);}
-  .track.AVOID::before{background-color:var(--red);}
-  .track.UNAVAILABLE{border-style:dashed;}
-
-  .track .thead{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
-  .track .tname{
-    font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
-    color:var(--faint);font-weight:700;
-  }
-  .track .horizon{
-    margin-left:auto;font-size:11px;color:var(--muted);font-weight:600;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52%;
-  }
-  .track .twhy{font-size:12.5px;color:var(--ink-2);line-height:1.5;}
-  .track .levels{
-    font-size:11px;color:var(--faint);margin-top:7px;
-    font-variant-numeric:tabular-nums;
-  }
-  .track .gate{
-    display:inline-block;margin-top:7px;font-size:10px;font-weight:700;
-    letter-spacing:.05em;
-    color:var(--amber);background-color:var(--amber-soft);padding:3px 8px;border-radius:6px;
-  }
-
-  .badge{
-    display:inline-flex;align-items:center;justify-content:center;
-    padding:4px 0;width:74px;border-radius:7px;
-    font-size:10px;font-weight:750;letter-spacing:.08em;
-  }
-  .badge.BUY{background-color:var(--green-soft);color:var(--green);}
-  .badge.WATCH{background-color:var(--amber-soft);color:var(--amber);}
-  .badge.AVOID{background-color:var(--red-soft);color:var(--red);}
-  .badge.UNAVAILABLE{background-color:var(--unavailable-soft);color:var(--faint);width:96px;}
-
-  .chip{
-    display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:9px;
-    font-size:11.5px;font-weight:600;background-color:var(--card);color:var(--ink-2);
-    border:1px solid var(--border-strong);white-space:nowrap;
-    transition:border-color .25s ease;
-  }
-  .chip .livedot{width:6px;height:6px;border-radius:50%;background-color:var(--faint);}
-  .chip.live{
-    background-color:var(--green-soft);color:var(--green);border-color:rgba(61,220,151,.35);
-  }
-  .chip.live .livedot{background-color:var(--green);animation:pulse 1.6s ease-in-out infinite;}
-  .chip.pre{background-color:var(--amber-soft);color:var(--amber);border-color:rgba(245,181,68,.32);}
-  .chip.pre .livedot{background-color:var(--amber);}
-
-  .sym{font-weight:660;font-size:14.5px;letter-spacing:-.01em;}
-  .sym .fired{
-    display:inline-block;margin-left:7px;font-size:9px;font-weight:750;letter-spacing:.1em;
-    color:var(--green);background-color:var(--green-soft);padding:2px 7px;border-radius:5px;
-    vertical-align:1px;box-shadow:0 0 0 1px rgba(61,220,151,.25);
-  }
-  .subtle{
-    font-size:11.5px;color:var(--muted);margin-top:3px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .conf{font-size:14px;font-weight:660;font-variant-numeric:tabular-nums;}
-  .conf small{color:var(--faint);font-weight:500;}
-  .why{font-size:12.5px;color:var(--ink-2);line-height:1.5;}
-  .why .cat{
-    display:block;font-size:11px;color:var(--faint);margin-top:4px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .px{text-align:right;}
-  .px .p{
-    font-size:14.5px;font-weight:660;letter-spacing:-.015em;
-    font-variant-numeric:tabular-nums;
-  }
-  .px .c{font-size:12px;font-weight:640;margin-top:2px;font-variant-numeric:tabular-nums;}
-  .up{color:var(--green);} .down{color:var(--red);} .flat{color:var(--muted);}
-  .empty{padding:46px 20px;text-align:center;color:var(--muted);font-size:13px;}
-
-  /* ---------------- sector + order-book tables ---------------- */
-  .trow{
-    display:grid;gap:14px;align-items:center;padding:11px 18px;
-    border-top:1px solid var(--border);font-size:12.5px;
-    transition:background-color .2s ease;
-  }
-  .trow:not(.head):hover{background-color:var(--card-low);}
-  .trow:first-child{border-top:0;}
-  .trow.head{
-    background-color:var(--card-high);border-top:0;padding:9px 18px;font-size:9.5px;
-    letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700;
-  }
-  .sectrow{grid-template-columns:minmax(120px,1.4fr) 92px 92px 110px minmax(140px,1fr) 96px;}
-  .obrow{grid-template-columns:minmax(120px,1.3fr) 96px 110px 96px minmax(160px,1.6fr);}
-  .pill{
-    display:inline-block;padding:3px 9px;border-radius:6px;
-    font-size:9.5px;font-weight:750;letter-spacing:.07em;text-transform:uppercase;
-  }
-  .pill.leading{background-color:var(--green-soft);color:var(--green);}
-  .pill.lagging{background-color:var(--red-soft);color:var(--red);}
-  .pill.mixed{background-color:var(--amber-soft);color:var(--amber);}
-  .pill.neutral{background-color:var(--unavailable-soft);color:var(--faint);}
-  .num{font-variant-numeric:tabular-nums;}
-
-  /* ---------------- IPO desk ---------------- */
-  .ipo{
-    padding:14px 18px;border-top:1px solid var(--border);
-    animation:slidein .45s cubic-bezier(.2,.7,.3,1) both;
-    transition:background-color .2s ease;
-  }
-  .ipo:first-child{border-top:0;}
-  .ipo:hover{background-color:var(--card-low);}
-  .ipotop{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:9px;}
-  .ipotop .band{margin-left:auto;font-size:12.5px;font-weight:640;
-                font-variant-numeric:tabular-nums;white-space:nowrap;}
-  .ipometa{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
-    gap:9px 14px;margin:9px 0 0;padding-top:9px;border-top:1px solid var(--border);
-  }
-  .ipometa .k{
-    font-size:9px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--faint);font-weight:700;
-  }
-  .ipometa .v{font-size:13px;font-weight:620;margin-top:2px;
-              font-variant-numeric:tabular-nums;}
-  .ipometa .v.dim{color:var(--faint);font-weight:450;}
-  .ipowhy{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin-top:9px;}
-  .ipoflag{
-    display:inline-block;margin-top:7px;margin-right:6px;font-size:10px;font-weight:700;
-    letter-spacing:.05em;padding:3px 8px;border-radius:6px;
-    color:var(--amber);background-color:var(--amber-soft);
-  }
-  .ipoflag.unofficial{color:var(--faint);background-color:var(--unavailable-soft);}
-  .ipoflag.ok{color:var(--green);background-color:var(--green-soft);}
-  .badge.APPLY{background-color:var(--green-soft);color:var(--green);}
-  .badge.NEUTRAL{background-color:var(--amber-soft);color:var(--amber);}
-  .badge.AVOID{background-color:var(--red-soft);color:var(--red);}
-  .badge.UNKNOWN{background-color:var(--unavailable-soft);color:var(--faint);}
-  .wchip{
-    font-size:9px;font-weight:750;letter-spacing:.09em;text-transform:uppercase;
-    padding:3px 8px;border-radius:5px;background-color:var(--unavailable-soft);color:var(--faint);
-  }
-  .wchip.open{background-color:var(--accent-soft);color:var(--accent);}
-
-  /* ---------------- log ---------------- */
-  details.log{margin-top:20px;}
-  details.log summary{
-    cursor:pointer;font-size:11px;color:var(--muted);letter-spacing:.09em;
-    text-transform:uppercase;font-weight:650;
-    padding:7px 2px;list-style:none;user-select:none;display:flex;align-items:center;gap:8px;
-  }
-  details.log summary::-webkit-details-marker{display:none;}
-  details.log summary::before{
-    content:"▸";font-size:10px;color:var(--accent);transition:transform .25s ease;
-  }
-  details.log[open] summary::before{transform:rotate(90deg);}
-  details.log summary:hover{color:var(--ink-2);}
-  .logbox{
-    background-color:var(--card);border:1px solid var(--border);border-radius:12px;
-    padding:14px 16px;max-height:280px;overflow:auto;
-    font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    color:var(--ink-2);white-space:pre-wrap;word-break:break-word;
-    font-variant-numeric:tabular-nums;
-  }
-  .logbox::-webkit-scrollbar{width:8px;}
-  .logbox::-webkit-scrollbar-thumb{background-color:var(--border-strong);border-radius:4px;}
-
-  .banner{
-    display:none;margin-bottom:18px;border-radius:12px;padding:12px 15px;
-    font-size:12.5px;border:1px solid;
-    animation:rise .4s cubic-bezier(.2,.7,.3,1) both;
-  }
-  .banner.show{display:block;}
-  .banner.warn{background-color:var(--amber-soft);border-color:rgba(245,181,68,.3);color:var(--amber);}
-  .banner.err{background-color:var(--red-soft);border-color:rgba(255,107,107,.3);color:var(--red);}
-
-  footer{
-    margin-top:28px;padding-top:18px;border-top:1px solid var(--border);
-    font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;
-    gap:16px;flex-wrap:wrap;
-  }
-  footer .right{color:var(--faint);}
-
-  /* ======================================================================
-     Responsive
-     ----------------------------------------------------------------------
-     Five bands. The grids are auto-fit rather than fixed counts wherever the
-     content allows, so the layout also survives the widths between the
-     breakpoints instead of only at them.
-     ====================================================================== */
-
-  /* Nothing may push the page sideways. Long unbroken strings — a CLI path in
-     the engine line, a URL in a headline — were the main offenders. */
-  html,body{max-width:100%;overflow-x:hidden;}
-  .brandtext p,.why,.twhy,.subtle.wrap,.logbox{overflow-wrap:anywhere;}
-
-  /* .subtle is nowrap+ellipsis by default, which silently truncates a long
-     cell instead of wrapping it. `.wrap` opts a cell out — the order-book
-     reading is a full sentence and must not lose its tail. */
-  .subtle.wrap{white-space:normal;overflow:visible;text-overflow:clip;}
-
-  /* A grid or flex item defaults to min-width:auto, which refuses to shrink
-     below its content. One long sentence in a table cell then blows the whole
-     track out past the viewport. Every text-bearing child needs min-width:0. */
-  .trow > *,.tracks > *,.rowtop > *,.stats > *,.kpis > *,.agents > *,
-  .strip > *,.controls > *{min-width:0;}
-
-  /* Explicit counts, not auto-fit. There are exactly 4 KPIs and 8 agents, and
-     both divide evenly into 4 or 2 — auto-fit picked 5 agent columns at wide
-     viewports, which left three orphans on the second row. */
-  .kpis{grid-template-columns:repeat(4,minmax(0,1fr));}
-  .agents{grid-template-columns:repeat(4,minmax(0,1fr));}
-
-  /* --- very large: give the density somewhere to go -------------------- */
-  @media (min-width:1600px){
-    .wrap{max-width:1440px;}
-    .kpi .value{font-size:32px;}
-    .tracks{gap:13px;}
-  }
-
-  /* --- laptop: four agent cards get cramped below this --------------- */
-  @media (max-width:1180px){
-    .agents{grid-template-columns:repeat(3,minmax(0,1fr));}
-  }
-
-  /* --- tablet ---------------------------------------------------------- */
-  @media (max-width:1000px){
-    .kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
-    .agents{grid-template-columns:repeat(2,minmax(0,1fr));}
-    .tracks{grid-template-columns:1fr;}
-    .sectrow{grid-template-columns:minmax(0,1.4fr) 1fr 1fr 1fr;}
-    .obrow{grid-template-columns:minmax(0,1.3fr) 1fr 1fr;}
-    /* the columns the narrower grid can no longer carry */
-    .sectrow > :nth-child(5),.sectrow > :nth-child(6){grid-column:1/-1;}
-    .obrow  > :nth-child(5){grid-column:1/-1;}
-    .trow.head{display:none;}
-    .trow .cell[data-label]::before{
-      content:attr(data-label);display:block;
-      font-size:9px;letter-spacing:.09em;text-transform:uppercase;
-      color:var(--faint);font-weight:700;margin-bottom:2px;
-    }
-  }
-
-  /* --- small tablet / large phone -------------------------------------- */
-  @media (max-width:760px){
-    .wrap{padding:22px 16px 56px;}
-    header{align-items:flex-start;gap:14px;}
-    .brandtext h1{white-space:normal;font-size:16.5px;line-height:1.3;}
-    .brandtext p{white-space:normal;font-size:11.5px;}
-    .controls{width:100%;display:grid;grid-template-columns:1fr auto auto;gap:8px;}
-    #phase{grid-column:1/-1;justify-content:center;}
-    input[type=number]{width:100%;}
-    button.primary{grid-column:1/-1;justify-content:center;}
-
-    /* Rows become stacked cards. Every value keeps its label, because the
-       header row is gone and a bare "+0.47%" says nothing. */
-    .sectrow,.obrow{grid-template-columns:1fr 1fr;gap:10px 14px;}
-    /* stacked: there is width to wrap into, and truncation loses data */
-    .trow .cell.subtle{white-space:normal;overflow:visible;text-overflow:clip;}
-    .sectrow > .lead,.obrow > .lead,
-    .sectrow > :nth-child(5),.sectrow > :nth-child(6),
-    .obrow > :nth-child(5){grid-column:1/-1;}
-    .strip{padding:2px 4px;}
-    .stripitem{width:100%;padding:8px 11px;}
-  }
-
-  /* --- phone ----------------------------------------------------------- */
-  @media (max-width:560px){
-    .wrap{padding:18px 13px 44px;}
-    .kpis,.agents{grid-template-columns:1fr;}
-    .kpi{padding:13px 15px;}
-    .kpi .value{font-size:26px;}
-    .agent .role{min-height:0;}
-    .row{padding:13px 14px;}
-    /* price moves under the symbol rather than fighting it for the line */
-    .rowtop{flex-wrap:wrap;gap:4px 10px;}
-    .rowtop .px{margin-left:0;width:100%;text-align:left;justify-content:flex-start;}
-    .track .horizon{max-width:100%;}
-    .sechead{flex-direction:column;align-items:flex-start;gap:3px;}
-    .sechead h2::after{display:none;}
-    footer{flex-direction:column;gap:8px;}
-  }
-
-  /* --- small phone ----------------------------------------------------- */
-  @media (max-width:400px){
-    .wrap{padding:16px 11px 40px;}
-    .brandtext h1{font-size:15.5px;}
-    .mark{width:34px;height:34px;}
-    .kpi .value{font-size:24px;}
-    .controls{grid-template-columns:1fr auto;}
-    .sectrow,.obrow{grid-template-columns:1fr;}
-    .track{padding:10px 11px;}
-    .stats{gap:8px;}
-  }
-
-  /* --- touch: the guideline minimum is 44px, several controls were 35 --- */
-  @media (pointer:coarse){
-    button.primary,button.ghost,select,input[type=number],.navlink{min-height:44px;}
-    button.ghost{width:44px;}
-    details.log summary{padding:11px 2px;}
-    .stripitem{padding:11px 12px;}
-  }
-
-  /* --- short viewports: a phone in landscape --------------------------- */
-  @media (max-height:520px) and (orientation:landscape){
-    .logbox{max-height:150px;}
-    .agent .role{min-height:0;}
-  }
-</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Your Indian equity research workspace. Explore stock evidence, agent analysis, intraday strategies and quality screens with Dalal Desk.">
+<title>Overview · Dalal Desk</title>
 <!-- shared:head -->
+<!-- shared:styles -->
+<style>
+.scan-panel{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:22px 24px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}.scan-intro{display:flex;gap:14px;align-items:center;max-width:310px}.scan-icon{display:grid;place-items:center;width:44px;height:44px;flex:none;background:var(--accent-soft);color:var(--accent);border-radius:12px}.scan-icon svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.scan-intro h2{font-size:15px;margin:0 0 3px;letter-spacing:-.2px}.scan-intro p{font-size:11px;color:var(--muted);margin:0}.scan-fields{display:flex;align-items:flex-end;gap:12px}.scan-fields .field{min-width:0}.scan-fields input{width:145px}.scan-fields select{width:168px}.scan-fields .primary{min-width:160px;height:42px}.research-disclaimer{font-size:11px;color:var(--muted);margin:10px 2px 0;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}.research-disclaimer a{font-weight:550}.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 304px;gap:24px;align-items:start}.verdict-panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}.verdict-panel>.sechead{padding:22px 22px 0;margin-bottom:16px}.results-count{font-size:11px;padding:3px 8px;border-radius:6px;color:var(--muted);background:var(--card-high)}.filter-panel{padding:0 22px 15px;border-bottom:1px solid var(--border)}.filter-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:7px}.filter-meta .note{font-size:10px}.search-toolbar select{max-width:150px}.search-toolbar>.button-text{white-space:nowrap}.feed{overflow:hidden}.row{padding:21px 22px;border-top:1px solid var(--border)}.row:first-child{border-top:0}.rowtop{display:flex;align-items:center;gap:12px;margin-bottom:16px}.rowtop>div:first-child{min-width:0}.sym{font-size:16px;font-weight:650;letter-spacing:-.3px}.sym .fired{display:inline-block;font-size:9px;margin-left:8px;padding:3px 6px;background:var(--green-soft);color:var(--green);border-radius:5px;vertical-align:2px}.subtle{font-size:11px;line-height:1.6;overflow-wrap:anywhere}.rowtop .px{margin-left:auto;text-align:right;flex:none}.px .p{font-size:16px;font-weight:600;letter-spacing:-.3px}.px .c{font-size:11px;margin-top:3px}.tracks{display:grid;grid-template-columns:1fr 1fr;gap:18px}.track{min-width:0;padding:0 0 0 18px;border-left:1px solid var(--border)}.track:first-child{padding-left:0;border-left:0}.track .thead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}.track .tname{font-size:10px;font-weight:600;color:var(--muted)}.track .horizon{font-size:10px;color:var(--muted);margin-left:auto}.conf{font-size:15px;font-weight:650}.conf small{font-size:10px;color:var(--muted);font-weight:400}.track .twhy{font-size:12px;line-height:1.7;color:var(--ink-2);overflow-wrap:anywhere}.track .levels{font-size:11px;color:var(--muted);margin-top:9px;line-height:1.7}.track .gate{display:inline-block;margin-top:10px;font-size:10px;font-weight:550;line-height:1.6;color:var(--amber);background:var(--amber-soft);padding:5px 8px;border-radius:6px}.why{font-size:12px;color:var(--ink-2)}.feed-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 22px;border-top:1px solid var(--border);min-height:62px}.feed-footer .note{font-size:11px}.feed-footer:has(button[hidden]){min-height:46px}.insight-sidebar{display:grid;gap:18px}.insight-sidebar .panel{padding:20px}.insight-sidebar .sechead{gap:8px;margin-bottom:8px}.insight-sidebar .sechead h2{font-size:15px}.panel-description{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:15px}.agents{display:grid;gap:0}.agent{padding:13px 0;border-top:1px solid var(--border)}.agent .top{display:flex;align-items:center;gap:10px}.agent .icon{display:grid;place-items:center;width:30px;height:30px;background:var(--card-high);color:var(--muted);border-radius:8px;flex:none}.agent .icon svg{width:17px;height:17px}.agent .name{font-size:12px;font-weight:600}.agent .role{font-size:11px;color:var(--muted);line-height:1.5;margin:7px 0 9px}.agent .status{display:flex;align-items:center;gap:5px;margin-left:auto;font-size:9px;color:var(--faint);text-transform:capitalize}.agent.working .status,.agent.working .icon{color:var(--accent)}.agent.working .icon{background:var(--accent-soft)}.agent.done .status,.agent.done .icon{color:var(--green)}.agent.done .icon{background:var(--green-soft)}.agent.working .dot{background:var(--accent)}.agent.done .dot{background:var(--green)}.agent .bars{display:none}.agent .stats{display:flex;gap:18px}.stat{display:flex;align-items:baseline;gap:5px}.stat .k{font-size:9px;color:var(--faint)}.stat .v{font-size:10px;font-weight:600;color:var(--ink-2);overflow-wrap:anywhere}.panel-status{font-size:10px;color:var(--muted);padding:10px 0 0;margin-top:5px;border-top:1px solid var(--border)}.context-list{display:grid;gap:15px;margin-top:18px}.stripitem{display:grid;gap:3px}.stripitem .k{font-size:10px;color:var(--muted)}.stripitem .v{font-size:12px;font-weight:550;color:var(--ink-2);overflow-wrap:anywhere}.context-note{font-size:10px;color:var(--muted);line-height:1.7;margin:16px 0 0;border-top:1px solid var(--border);padding-top:14px}.market-section{margin-top:26px}.market-section .feed{background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}.trow{display:grid;gap:15px;align-items:center;padding:14px 18px;border-top:1px solid var(--border);font-size:12px}.trow:first-child{border:0}.trow.head{background:var(--card-low);color:var(--muted);font-size:10px;font-weight:600}.sectrow{grid-template-columns:minmax(120px,1.4fr) 80px 80px 100px minmax(120px,1fr) 90px}.obrow{grid-template-columns:minmax(120px,1.2fr) 100px 110px 100px minmax(160px,1.8fr)}.trow>*{min-width:0}.trow .sym{font-size:13px}.subtle.wrap{padding:0;margin:0;max-width:none;white-space:normal}.run-details{margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:0 20px}.run-details summary{padding:15px 0}.engine-detail{color:var(--muted);font-size:11px;overflow-wrap:anywhere;margin:8px 0 15px}.run-details .logbox{margin-bottom:18px}.flash{animation:value-change .6s ease-out}@keyframes value-change{from{color:var(--accent)}to{color:inherit}}#retry-connection{margin:0 0 16px}.intro-action{font-size:12px;color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap}.intro-action:hover{text-decoration:underline}.main-column{min-width:0}
+@media(max-width:1250px){.workspace-grid{grid-template-columns:minmax(0,1fr) 260px;gap:18px}.scan-panel{align-items:flex-start;flex-direction:column;gap:18px}.scan-intro{max-width:none}.scan-fields{width:100%}.scan-fields .field{flex:1}.scan-fields input,.scan-fields select{width:100%}.tracks{grid-template-columns:1fr;gap:16px}.track{padding:16px 0 0;border-left:0;border-top:1px solid var(--border)}.track:first-child{padding-top:0;border-top:0}.filter-meta{align-items:flex-start;flex-direction:column;gap:0}.search-toolbar select{max-width:none;flex:1}}
+@media(max-width:1000px){.workspace-grid{grid-template-columns:minmax(0,1fr)}.insight-sidebar{grid-template-columns:1fr 1fr}.agents{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}.tracks{grid-template-columns:1fr 1fr;gap:18px}.track{padding:0 0 0 18px;border-top:0;border-left:1px solid var(--border)}.filter-meta{flex-direction:row;align-items:center}.sectrow,.obrow{grid-template-columns:1fr 1fr}.trow.head{display:none}.trow .cell[data-label]::before{content:attr(data-label);display:block;font-size:10px;color:var(--muted);font-weight:550;margin-bottom:4px}.sectrow>.lead,.obrow>.lead,.sectrow>:nth-child(5),.obrow>:nth-child(5){grid-column:1/-1}}
+@media(max-width:600px){.scan-panel{padding:18px;gap:16px}.scan-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.scan-fields .primary{grid-column:1/-1;width:100%;margin-top:3px}.scan-intro p{font-size:11px}.research-disclaimer{font-size:10px}.workspace-grid{gap:20px}.tracks{grid-template-columns:1fr;gap:15px}.track{padding:15px 0 0;border-left:0;border-top:1px solid var(--border)}.track:first-child{padding-top:0;border:0}.insight-sidebar{grid-template-columns:1fr}.agents{grid-template-columns:1fr 1fr}.verdict-panel>.sechead{padding:18px 17px 0}.filter-panel{padding:0 17px 12px}.row{padding:19px 17px}.feed-footer{padding:12px 17px}.filter-meta{align-items:flex-start;flex-direction:column}.rowtop{align-items:flex-start}.sym{font-size:15px}.rowtop .px .p{font-size:14px}.rowtop .px .c{font-size:10px}.intro-action{font-size:11px}.page-actions{width:auto}.research-disclaimer>a{display:none}.track .horizon{margin-left:0}.agent .stats{gap:9px;flex-wrap:wrap}.agent .top{gap:6px}.agent .name{font-size:11px}.agent .status{font-size:8px}}
+</style>
 </head>
 <body>
-<a class="skip" href="#board">Skip to the board</a>
+<!-- shared:shell -->
 <div class="wrap">
-
-  <header>
-    <div class="brandline">
-      <div class="mark" aria-hidden="true">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 17l5-6 4 4 5-8"/><path d="M17 7h4v4"/>
-        </svg>
-      </div>
-      <div class="brandtext">
-        <h1>
-          <span id="brand">…</span>
-          <span class="sep">·</span><span class="light">Indian stock analysis</span>
-          <span class="sep">·</span><span class="light" id="agentcount">…</span>
-        </h1>
-        <p id="engineline">detecting engine…</p>
-      </div>
-    </div>
-    <nav class="controls" aria-label="Desks and controls">
-      <span class="chip" id="phase"><span class="livedot"></span><span id="phasetext">…</span></span>
-      <a href="/quality-desk" class="navlink" id="qualitylink" title="Open quality screen">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2l2.6 6.6L21 9.2l-5 4.4 1.5 6.7L12 17l-5.5 3.3L8 13.6 3 9.2l6.4-.6z"/>
-        </svg>
-        Quality
-      </a>
-      <a href="/intraday-desk" class="navlink" id="intradaylink" title="Open intraday desk">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 17l6-6 4 4 7-7"/><path d="M14 7h7v7"/>
-        </svg>
-        Intraday
-      </a>
-      <a href="/ipo-desk" class="navlink" id="ipolink" title="Open IPO desk">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>
-        </svg>
-        IPO desk
-      </a>
-      <button class="ghost" id="theme" title="Switch theme" aria-label="Switch theme">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path id="themeicon" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
-        </svg>
-      </button>
-      <input id="capital" type="number" min="0" step="1000" placeholder="Amount (₹)"
-             title="Amount you are deploying today. Leave blank to use the .env default."
-             aria-label="Capital for this run" />
-      <select id="mode" aria-label="Data mode">
-        <option value="demo">Demo · offline bundles</option>
-        <option value="live">Live · NSE via yfinance</option>
-      </select>
-      <button class="primary" id="start">
-        <span id="startspin" class="spinner" style="display:none"></span>
-        <span id="startlabel">Start agents</span>
-      </button>
-    </nav>
+  <header class="page-header">
+    <div><h1 class="page-title">Research overview</h1><p class="page-description">A clearer view of the market. From the first screen to the final verdict.</p></div>
+    <div class="page-actions"><span class="chip" id="phase"><span class="livedot"></span><span id="phasetext">Checking session</span></span></div>
   </header>
-
-  <div class="banner" id="banner"></div>
-
-  <main id="board">
-  <div class="kpis enter d1">
-    <div class="kpi">
-      <div class="label">Universe</div>
-      <div class="value" id="kpi-universe">—</div>
-      <div class="sub">stocks scanned</div>
+  <main id="board" tabindex="-1">
+    <section class="scan-panel" aria-labelledby="scan-title">
+      <div class="scan-intro"><div class="scan-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg></div><div><h2 id="scan-title">Find your next research idea</h2><p>Eight agents. Two horizons. One evidence-led view.</p></div></div>
+      <div class="scan-fields">
+        <div class="field"><label for="mode" class="field-label">Data source</label><select id="mode"><option value="demo">Demo · offline data</option><option value="live">Live · NSE market</option></select></div>
+        <div class="field"><label for="capital" class="field-label">Paper capital (₹)</label><input id="capital" type="number" min="1" step="any" inputmode="decimal" placeholder="Use default" aria-describedby="capital-error" /></div>
+        <button type="button" class="primary" id="start" disabled><span id="startspin" class="spinner" style="display:none" aria-hidden="true"></span><span id="startlabel">Start analysis</span></button>
+      </div>
+    </section>
+    <div id="capital-error" class="field-error" role="alert"></div>
+    <p class="research-disclaimer"><span>Analysis only. No orders are ever placed. Demo figures are illustrative.</span><a href="#run-details">View engine &amp; run details</a></p>
+    <div class="banner" id="banner" role="status" aria-live="polite"></div><button id="retry-connection" class="ghost" type="button" hidden>Retry connection</button>
+    <section class="kpis" aria-label="Analysis summary">
+      <div class="kpi"><div class="kpi-label-line"><span class="label">Stocks scanned</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></div><div class="value" id="kpi-universe">—</div><div class="sub">Across the research universe</div></div>
+      <div class="kpi"><div class="kpi-label-line"><span class="label">In the shortlist</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v7l-4 2v-9Z"/></svg></div><div class="value" id="kpi-debate">—</div><div class="sub">Reviewed by the agent panel</div></div>
+      <div class="kpi"><div class="kpi-label-line"><span class="label">Buy signals</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17 6-6 4 4 8-10M15 5h6v6"/></svg></div><div class="value" id="kpi-buys">—</div><div class="sub" id="kpi-buys-sub">Intraday + positional</div></div>
+      <div class="kpi kpi-accent"><div class="kpi-label-line"><span class="label">Top research pick</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 3 6 6 1-4.5 4.5 1 6L12 18l-5.5 2.5 1-6L3 10l6-1Z"/></svg></div><div class="value" id="kpi-top">—</div><div class="sub" id="kpi-top-sub">Awaiting the judge</div></div>
+    </section>
+    <div class="workspace-grid">
+      <div class="main-column">
+        <section class="verdict-panel" id="verdicts" aria-labelledby="verdict-title">
+          <div class="sechead"><h2 id="verdict-title">Latest verdicts</h2><span class="results-count" id="feednote">No verdicts yet</span></div>
+          <div class="filter-panel">
+            <div class="search-toolbar"><label class="search-field"><span class="sr-only">Search verdicts</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="verdict-search" type="search" placeholder="Search a stock or company" autocomplete="off" /></label><select id="verdict-sort" aria-label="Sort verdicts"><option value="newest">Latest first</option><option value="confidence">Confidence</option><option value="symbol">Stock name A–Z</option></select><button id="verdict-clear" class="button-text" type="button" hidden>Clear filters</button></div>
+            <div class="filter-meta"><label class="onlybuys"><input type="checkbox" id="buysonly"/><span>Long-term buys only</span></label><span class="note">Inspect both horizons before acting</span></div>
+          </div>
+          <div class="feed" id="feed"><div class="empty"><div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5Z M14 3v5h5M8 12h8M8 16h5"/></svg></div><strong>Your research starts here</strong><p>Choose Demo to explore offline evidence, then start an analysis. Your stock verdicts will appear here.</p></div></div>
+          <div class="feed-footer"><span id="feed-status" class="note" role="status" aria-live="polite"></span><button type="button" class="ghost" id="load-more" hidden>Load more verdicts</button></div>
+        </section>
+        <details class="run-details" id="run-details"><summary>Engine &amp; run details</summary><p class="engine-detail" id="engineline">Connecting to the analysis engine…</p><div class="logbox" id="log">No run activity yet.</div></details>
+      </div>
+      <aside class="insight-sidebar" aria-label="Research context">
+        <section class="panel"><div class="sechead"><h2>Research conditions</h2></div><p class="panel-description">The context behind every verdict.</p><div class="context-list" id="strip">
+          <div class="stripitem"><span class="k">Market regime</span><span class="v" id="regime">—</span></div>
+          <div class="stripitem"><span class="k">Track record</span><span class="v" id="record">No settled signals yet</span></div>
+          <div class="stripitem"><span class="k">Paper capital</span><span class="v" id="capitalshown">—</span></div>
+          <div class="stripitem"><span class="k">Confidence</span><span class="v" id="calib">Not yet calibrated</span></div>
+          <div class="stripitem"><span class="k">Next scheduled run</span><span class="v" id="nextrun">—</span></div>
+        </div><p class="context-note">A verdict is a research input, not a promise of returns. Check the evidence and any blocked signals.</p></section>
+        <section class="panel"><div class="sechead"><h2>The research team</h2><span class="note" id="agentcount">8 agents</span></div><p class="panel-description">From discovery to a second opinion.</p><div class="agents" id="agents"><div class="subtle">Connecting to the panel…</div></div><div class="panel-status" id="panelnote" role="status">Ready when you are</div></section>
+      </aside>
     </div>
-    <div class="kpi">
-      <div class="label">In debate</div>
-      <div class="value" id="kpi-debate">—</div>
-      <div class="sub">shortlisted for the panel</div>
-    </div>
-    <div class="kpi">
-      <div class="label">Buy signals</div>
-      <div class="value" id="kpi-buys">—</div>
-      <div class="sub" id="kpi-buys-sub">intraday + positional</div>
-    </div>
-    <div class="kpi">
-      <div class="label">Top pick</div>
-      <div class="value" id="kpi-top">—</div>
-      <div class="sub" id="kpi-top-sub">awaiting the judge</div>
-    </div>
-  </div>
-
-  <div class="strip enter d2" id="strip">
-    <div class="stripitem">
-      <span class="k">Track record</span>
-      <span class="v" id="record">no settled signals yet</span>
-    </div>
-    <div class="stripitem">
-      <span class="k">Market regime</span>
-      <span class="v" id="regime">—</span>
-    </div>
-    <div class="stripitem">
-      <span class="k">Sizing against</span>
-      <span class="v" id="capitalshown">—</span>
-    </div>
-    <div class="stripitem">
-      <span class="k">Confidence</span>
-      <span class="v" id="calib">not yet calibrated</span>
-    </div>
-    <div class="stripitem">
-      <span class="k">Next scheduled run</span>
-      <span class="v" id="nextrun">—</span>
-    </div>
-  </div>
-
-  <div class="sechead">
-    <h2>The panel</h2>
-    <span class="note" id="panelnote">idle — press Start agents</span>
-  </div>
-  <div class="agents enter d3" id="agents"></div>
-
-
-
-  <div class="sechead" id="obhead" style="display:none">
-    <h2>Order book &gt; last quarter's sales</h2>
-    <span class="note" id="obnote"></span>
-  </div>
-  <div class="feed" id="obfeed" style="display:none;margin-bottom:30px"></div>
-
-  <div class="sechead" id="secthead" style="display:none">
-    <h2>Sector heatmap</h2>
-    <span class="note" id="sectnote"></span>
-  </div>
-  <div class="feed" id="sectfeed" style="display:none;margin-bottom:30px"></div>
-
-  <section aria-label="Latest verdicts">
-  <div class="sechead">
-    <h2>Latest verdicts</h2>
-    <span class="note" id="feednote">no verdicts yet</span>
-    <label class="onlybuys" title="Show only stocks the panel rated BUY for the multi-week horizon">
-      <input type="checkbox" id="buysonly" checked />
-      <span>Long-term buys only</span>
-    </label>
-  </div>
-  <div class="feed enter d4" id="feed">
-    <div class="empty">Nothing analysed yet. Pick a mode and start the panel.</div>
-  </div>
-
-  </section>
-
-  <details class="log">
-    <summary>Run log</summary>
-    <div class="logbox" id="log">—</div>
-  </details>
-
+    <section class="market-section" aria-label="Additional market evidence"><div class="sechead" id="obhead" style="display:none"><h2>Order book &gt; last quarter’s sales</h2><span class="note" id="obnote"></span></div><div class="feed" id="obfeed" style="display:none;margin-bottom:26px"></div><div class="sechead" id="secthead" style="display:none"><h2>Sector heatmap</h2><span class="note" id="sectnote"></span></div><div class="feed" id="sectfeed" style="display:none"></div></section>
   </main>
-
-  <footer>
-    <span id="foot-left">Built from — real stocks · data pulled — · engine: —</span>
-    <span class="right">Analysis only. No orders are ever placed. Not investment advice.</span>
-  </footer>
+  <footer><span id="foot-left">Data and engine details will appear after connecting.</span><span class="right">Analysis only. No orders are ever placed. Not investment advice.</span></footer>
 </div>
-
 <!-- shared:js -->
 <script>
 (function () {
@@ -927,38 +83,87 @@
     messenger:      '<path d="M21 4L3 11l7 3 3 7z"/><path d="M21 4L10 14"/>'
   };
 
-  /* Where the backend lives.
-     Served by Flask, this is the same origin and API === "". Hosted separately
-     (Vercel frontend, backend elsewhere) it comes from, in order: a ?api=
-     query parameter, a value saved in localStorage from a previous visit, or
-     window.__API_BASE__ baked in at deploy time. The chosen value is
-     remembered so the parameter only has to be passed once. */
-
-  var BUYS_ONLY = true;
+  var CFG = null, agentNodes = {}, lastRunKey = "";
+  var LAST_VERDICTS = null, feedSignature = "", sectorSignature = "", bookSignature = "";
+  var PAGE_SIZE = 12, visibleLimit = PAGE_SIZE;
+  var BUYS_ONLY = false, SEARCH = "", SORT = "newest";
+  var pollTimer = null, pollBusy = false, pollRequested = false, pollFailures = 0;
+  var connected = false, serverRunning = false, startPending = false;
+  var awaitingStart = false, acceptedAt = 0, requestGeneration = 0, actionNotice = null;
+  var searchComposing = false;
   try {
     var saved = localStorage.getItem("dalal.buysonly");
     if (saved !== null) { BUYS_ONLY = saved === "1"; }
-  } catch (e) { /* private mode */ }
+  } catch (e) { /* storage is optional */ }
 
+  function readFilters() {
+    var params = new URLSearchParams(location.search);
+    SEARCH = params.get("q") || "";
+    SORT = ["newest", "confidence", "symbol"].indexOf(params.get("sort")) !== -1
+      ? params.get("sort") : "newest";
+    if (params.has("buys")) { BUYS_ONLY = params.get("buys") === "1"; }
+    if (el("verdict-search")) { el("verdict-search").value = SEARCH; }
+    if (el("verdict-sort")) { el("verdict-sort").value = SORT; }
+    if (el("buysonly")) { el("buysonly").checked = BUYS_ONLY; }
+  }
 
-  (function () {
-    var box = document.getElementById("buysonly");
-    if (!box) { return; }
-    box.checked = BUYS_ONLY;
-    box.addEventListener("change", function () {
-      BUYS_ONLY = box.checked;
-      try { localStorage.setItem("dalal.buysonly", BUYS_ONLY ? "1" : "0"); }
-      catch (e) { /* private mode */ }
-      renderedVerdicts = -1;               // force a full repaint under the new filter
-      if (LAST_VERDICTS) { renderFeed(LAST_VERDICTS); }
+  function commitFilters() {
+    visibleLimit = PAGE_SIZE;
+    try {
+      var url = new URL(location.href);
+      if (SEARCH.trim()) { url.searchParams.set("q", SEARCH.trim()); }
+      else { url.searchParams.delete("q"); }
+      if (SORT !== "newest") { url.searchParams.set("sort", SORT); }
+      else { url.searchParams.delete("sort"); }
+      // Both checkbox states reproduce the view when the URL is shared.
+      url.searchParams.set("buys", BUYS_ONLY ? "1" : "0");
+      history.replaceState(null, "", url);
+      localStorage.setItem("dalal.buysonly", BUYS_ONLY ? "1" : "0");
+    } catch (e) { /* filtering still works without storage/history */ }
+    renderFeed(LAST_VERDICTS);
+  }
+
+  function clearFilters() {
+    SEARCH = ""; SORT = "newest"; BUYS_ONLY = false;
+    if (el("verdict-search")) { el("verdict-search").value = ""; }
+    if (el("verdict-sort")) { el("verdict-sort").value = SORT; }
+    if (el("buysonly")) { el("buysonly").checked = false; }
+    commitFilters();
+    if (el("verdict-search")) { el("verdict-search").focus(); }
+  }
+
+  readFilters();
+  if (el("buysonly")) {
+    el("buysonly").addEventListener("change", function () { BUYS_ONLY = this.checked; commitFilters(); });
+  }
+  if (el("verdict-search")) {
+    el("verdict-search").addEventListener("compositionstart", function () { searchComposing = true; });
+    el("verdict-search").addEventListener("compositionend", function () {
+      searchComposing = false; SEARCH = this.value; commitFilters();
     });
-  })();
-
-
-
-  var CFG = null, agentNodes = {}, renderedVerdicts = 0, lastRunKey = "";
-  var LAST_VERDICTS = null;
-
+    el("verdict-search").addEventListener("input", function (event) {
+      if (searchComposing || event.isComposing) { return; }
+      SEARCH = this.value; commitFilters();
+    });
+  }
+  if (el("verdict-sort")) {
+    el("verdict-sort").addEventListener("change", function () { SORT = this.value; commitFilters(); });
+  }
+  if (el("verdict-clear")) { el("verdict-clear").addEventListener("click", clearFilters); }
+  if (el("load-more")) {
+    el("load-more").addEventListener("click", function () {
+      var previousLimit = visibleLimit;
+      visibleLimit += PAGE_SIZE; renderFeed(LAST_VERDICTS);
+      var next = el("feed").children[previousLimit];
+      if (next) { next.focus({ preventScroll: true }); }
+    });
+  }
+  el("feed").addEventListener("click", function (event) {
+    if (event.target.closest("[data-clear-filters]")) { clearFilters(); }
+  });
+  window.addEventListener("popstate", function () {
+    readFilters(); visibleLimit = PAGE_SIZE; renderFeed(LAST_VERDICTS);
+  });
 
   /* Same as text(), but marks a genuine change so the eye catches the delta.
      Only used on values that actually move during a run — flashing something
@@ -978,45 +183,51 @@
 
   /* ---------------- theme ---------------- */
   function money(value) {
-    if (typeof value !== "number") { return "—"; }
+    if (!Number.isFinite(value)) { return "—"; }
     return "₹" + value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   function pct(value) {
-    if (typeof value !== "number") { return "—"; }
+    if (!Number.isFinite(value)) { return "—"; }
     return (value >= 0 ? "+" : "") + value.toFixed(2) + "%";
   }
 
   /* ---------------- boot ---------------- */
 
-  fetch(api("/config")).then(function (r) { return r.json(); }).then(function (cfg) {
+  function configure(cfg) {
+    if (!cfg || !Array.isArray(cfg.agents)) { throw new Error("The server returned an invalid configuration."); }
     CFG = cfg;
-    text(el("brand"), cfg.brand);
+    text(el("brand"), cfg.brand || "Dalal Desk");
     text(el("agentcount"), cfg.agent_count + " agents on duty");
-    document.title = cfg.brand + " · Indian stock analysis";
-    el("engineline").textContent =
-      "engine detected: " + cfg.engine + " · " + cfg.engine_reason +
-      " · telegram: " + (cfg.telegram_configured ? "configured" : "not configured") +
-      " · BUY at " + cfg.confidence_threshold + "/10+";
+    document.title = (cfg.brand || "Dalal Desk") + " · Research overview";
+    text(el("engineline"),
+      "Engine: " + cfg.engine + " · " + cfg.engine_reason +
+      " · Telegram: " + (cfg.telegram_configured ? "configured" : "not configured") +
+      " · BUY threshold " + cfg.confidence_threshold + "/10");
     buildAgents(cfg.agents);
-
-    if (!cfg.telegram_configured) {
-      banner("warn", "Telegram is not configured — signals will be shown here but not delivered. " +
-                     "Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to .env and restart.");
-    }
-    poll();
-  }).catch(function () {
-    banner("err", API
-      ? "Could not reach the backend at " + API + ". It may be asleep (free tiers "
-        + "idle out) or the ALLOWED_ORIGINS setting may not list this site."
-      : "Could not reach the local server. Is python app.py still running?");
-  });
+  }
 
   function banner(kind, message) {
     var node = el("banner");
     node.className = "banner show " + kind;
-    node.textContent = message;
+    text(node, message);
   }
   function hideBanner() { el("banner").className = "banner"; }
+
+  function updateControls() {
+    var busy = startPending || serverRunning || awaitingStart;
+    el("start").disabled = !CFG || !connected || busy;
+    el("start").setAttribute("aria-busy", busy ? "true" : "false");
+    el("startspin").style.display = busy ? "block" : "none";
+    text(el("startlabel"), busy ? "Analysing…" : "Start analysis");
+    el("mode").disabled = busy;
+    el("capital").disabled = busy;
+    document.documentElement.dataset.connection = connected ? "online" : (pollFailures ? "offline" : "loading");
+    if (el("retry-connection")) {
+      el("retry-connection").hidden = connected;
+      el("retry-connection").disabled = pollBusy;
+      text(el("retry-connection"), pollBusy ? "Connecting…" : "Retry connection");
+    }
+  }
 
   function buildAgents(agents) {
     var host = el("agents");
@@ -1050,33 +261,79 @@
 
   /* ---------------- polling ---------------- */
 
-  function poll() {
-    fetch(api("/status"))
-      .then(function (r) { return r.json(); })
-      .then(function (state) { render(state); })
-      .catch(function () { /* server restarting — the next tick will recover */ })
-      .then(function () { setTimeout(poll, 500); });
+  function schedulePoll(delay) {
+    clearTimeout(pollTimer);
+    if (!document.hidden) { pollTimer = setTimeout(poll, delay); }
   }
 
-  function render(s) {
-    if (!s || !s.agents) { return; }
+  function requestPoll() {
+    clearTimeout(pollTimer);
+    if (pollBusy) { pollRequested = true; return; }
+    poll();
+  }
 
-    var running = s.status === "running";
-    el("start").disabled = running;
-    el("startspin").style.display = running ? "block" : "none";
-    text(el("startlabel"), running ? "Agents working…" : "Start agents");
-    el("mode").disabled = running;
-    el("capital").disabled = running;
+  async function poll() {
+    if (document.hidden || pollBusy) { return; }
+    pollBusy = true;
+    updateControls();
+    try {
+      if (!CFG) { configure(await deskRequest("/config")); }
+      var generation = requestGeneration;
+      var state = await deskRequest("/status");
+      if (!state || !Array.isArray(state.agents) ||
+          ["idle", "running", "done", "error"].indexOf(state.status) === -1) {
+        throw new Error("The server returned an invalid analysis status.");
+      }
+      // A request made before Start cannot restore a stale idle state.
+      if (generation !== requestGeneration) { pollRequested = true; return; }
+      connected = true; pollFailures = 0;
+      render(state);
+    } catch (error) {
+      connected = false; pollFailures++;
+      banner("err", (CFG ? "Connection interrupted. Your last received research is still shown. "
+        : "Could not connect to the research server. ") +
+        "We’ll retry automatically. " + (error.message || "Check your connection."));
+    } finally {
+      pollBusy = false; updateControls();
+      var delay = pollFailures ? Math.min(30000, 2000 * Math.pow(2, Math.min(pollFailures - 1, 4)))
+        : (serverRunning || startPending || awaitingStart ? 1000 : 10000);
+      if (pollRequested) { pollRequested = false; delay = 0; }
+      schedulePoll(delay);
+    }
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { clearTimeout(pollTimer); }
+    else { requestPoll(); }
+  });
+  window.addEventListener("online", requestPoll);
+  if (el("retry-connection")) { el("retry-connection").addEventListener("click", requestPoll); }
+
+  function render(s) {
+    serverRunning = s.status === "running";
+    var running = serverRunning;
+    if (awaitingStart && !startPending) {
+      if (s.status !== "idle") { awaitingStart = false; actionNotice = null; }
+      else if (Date.now() - acceptedAt > 5000) {
+        awaitingStart = false;
+        actionNotice = { kind: "warn", message: "No active analysis was found on the server. You can start again." };
+      }
+    }
+    if (running) {
+      el("mode").value = s.mode;
+      if (Number.isFinite(s.capital) && s.capital > 0) { el("capital").value = s.capital; }
+    }
+    updateControls();
 
     /* KPIs */
     var k = s.kpis || {};
-    textFlash(el("kpi-universe"), k.universe || 0);
-    textFlash(el("kpi-debate"), k.in_debate || 0);
-    textFlash(el("kpi-buys"), k.buy_signals || 0);
+    textFlash(el("kpi-universe"), Number.isFinite(k.universe) ? k.universe : "—");
+    textFlash(el("kpi-debate"), Number.isFinite(k.in_debate) ? k.in_debate : "—");
+    textFlash(el("kpi-buys"), Number.isFinite(k.buy_signals) ? k.buy_signals : "—");
 
     var tg = s.telegram || {};
     text(el("kpi-buys-sub"),
-      (k.intraday_signals || 0) + " intraday · " + (k.positional_signals || 0) + " positional" +
+      (Number.isFinite(k.intraday_signals) ? k.intraday_signals : "—") + " intraday · " + (Number.isFinite(k.positional_signals) ? k.positional_signals : "—") + " positional" +
       (tg.sent ? " · " + tg.sent + " sent" : ""));
 
     /* track record — the desk's own hit rate on settled signals */
@@ -1125,12 +382,12 @@
     chip.className = "chip" + (mk.live_session ? " live" : (mk.phase === "pre_open" ? " pre" : ""));
     text(el("phasetext"), mk.live_session
       ? mk.label + " · " + mk.session_pct + "% done · " + mk.minutes_to_close + "m left"
-      : (mk.label || "market closed"));
+      : (mk.label || "Market status unavailable"));
 
     var top = k.top_pick || {};
     if (top.symbol) {
       el("kpi-top").innerHTML = esc(top.symbol) +
-        '<small>' + (top.confidence || "—") + '/10</small>';
+        '<small>' + (Number.isFinite(top.confidence) ? top.confidence : "—") + '/10</small>';
       text(el("kpi-top-sub"), (top.verdict || "").toLowerCase() === "buy"
         ? "best BUY · " + (top.track || "") + " · " + (top.horizon || "")
         : "highest confidence (" + esc(top.verdict || "—") + " · " + (top.track || "") + ")");
@@ -1148,14 +405,14 @@
         node.card.className = "agent " + a.status;
       }
       text(node.stext, a.status);
-      setStat(node.s1, a.stat1.value);
-      setStat(node.s2, a.stat2.value);
+      setStat(node.s1, a.stat1 && a.stat1.value);
+      setStat(node.s2, a.stat2 && a.stat2.value);
       if (a.status === "working") { working++; }
       if (a.status === "done") { done++; }
     });
 
     text(el("panelnote"),
-      s.status === "idle" ? "idle — press Start agents" :
+      s.status === "idle" ? "Ready when you are" :
       s.status === "running" ? done + " done · " + working + " working · mode " + s.mode :
       s.status === "error" ? "run stopped — see the log" :
       "all " + done + " agents done · mode " + s.mode);
@@ -1166,7 +423,7 @@
 
     /* verdict feed */
     var runKey = String(s.run_id) + "|" + String(s.started_at);
-    if (runKey !== lastRunKey) { lastRunKey = runKey; renderedVerdicts = 0; el("feed").innerHTML = ""; }
+    if (runKey !== lastRunKey) { lastRunKey = runKey; feedSignature = ""; visibleLimit = PAGE_SIZE; }
     renderFeed(s.verdicts || []);
 
     /* log */
@@ -1179,22 +436,22 @@
     }
 
     /* footer */
-    var universeTotal = CFG && CFG.universe ? CFG.universe.total : 0;
-    var stocks = s.mode === "demo" ? (k.universe || (CFG ? CFG.demo_bundles : 0)) : (k.universe || universeTotal);
+    var stocks = Number.isFinite(k.universe) ? k.universe : null;
     text(el("foot-left"),
-      "Built from " + stocks + " real stocks · data pulled " +
+      (stocks === null ? "Research data" : stocks + " stocks in this research run") + " · data updated " +
       (s.data_ts || "—") + " · engine: " + (s.engine || "—"));
 
     /* banners */
     if (s.status === "error" && s.error) {
       banner("err", "Run failed — " + s.error);
+    } else if (actionNotice) {
+      banner(actionNotice.kind, actionNotice.message);
     } else if (s.concentration) {
       banner("warn", "Concentration — " + s.concentration);
     } else if (tg.error) {
       banner("warn", "Telegram: " + tg.error);
     } else if (CFG && !CFG.telegram_configured) {
-      banner("warn", "Telegram is not configured — signals appear here but are not delivered. " +
-                     "Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to .env and restart.");
+      banner("info", "Telegram delivery is off. Signals remain available in this workspace.");
     } else {
       hideBanner();
     }
@@ -1206,79 +463,96 @@
     textFlash(node, str);
   }
 
-  /* The panel rates every stock it looks at, but most of the time the useful
-     answer is the short list it would actually buy. Filtering is a view, not
-     a change to the analysis: the AVOIDs and WATCHes are still there, still
-     stored, and one click away. */
+  /* Filters affect only this view; both horizons and safeguards are retained. */
   function isLongBuy(v) {
     var p = (v.tracks || {}).positional;
     return !!(p && p.verdict === "BUY");
   }
 
+  function confidence(v) {
+    var tracks = v.tracks || {};
+    return Math.max.apply(Math, [tracks.intraday, tracks.positional].map(function (track) {
+      return track && Number.isFinite(track.confidence) ? track.confidence : -1;
+    }));
+  }
+
   function renderFeed(verdicts) {
     var feed = el("feed");
-    LAST_VERDICTS = verdicts || LAST_VERDICTS;
-    var all = verdicts || [];
-    var shown = BUYS_ONLY ? all.filter(isLongBuy) : all;
+    if (Array.isArray(verdicts)) { LAST_VERDICTS = verdicts; }
+    var all = LAST_VERDICTS || [];
+    var query = SEARCH.trim().toLocaleLowerCase();
+    var shown = all.filter(function (v) {
+      return (!BUYS_ONLY || isLongBuy(v)) && (!query ||
+        (String(v.symbol || "") + " " + String(v.name || "")).toLocaleLowerCase().indexOf(query) !== -1);
+    });
+    if (SORT === "confidence") { shown.sort(function (a, b) { return confidence(b) - confidence(a); }); }
+    else if (SORT === "symbol") { shown.sort(function (a, b) { return String(a.symbol).localeCompare(String(b.symbol)); }); }
+    // /status supplies newest first; stable sorts retain that order for ties.
+    var visible = shown.slice(0, visibleLimit);
+    var activeFilters = !!(query || BUYS_ONLY || SORT !== "newest");
+    if (el("verdict-clear")) { el("verdict-clear").hidden = !activeFilters; }
+    if (el("load-more")) {
+      el("load-more").hidden = shown.length <= visibleLimit;
+      text(el("load-more"), "Show " + Math.min(PAGE_SIZE, Math.max(0, shown.length - visibleLimit)) + " more verdicts");
+    }
+    var note = LAST_VERDICTS === null ? "Waiting for research data"
+      : !all.length ? "No verdicts yet"
+      : shown.length + " of " + all.length + " verdicts" + (BUYS_ONLY ? " · positional BUYs" : "") +
+        (SORT === "confidence" ? " · highest track confidence" : SORT === "symbol" ? " · A–Z" : " · newest first");
+    text(el("feednote"), note);
+    text(el("feed-status"), all.length ? "Showing " + visible.length + " of " + shown.length + " matching verdicts" : note);
 
-    text(el("feednote"), all.length
-      ? (BUYS_ONLY
-          ? shown.length + " long-term buy" + (shown.length === 1 ? "" : "s") +
-            " of " + all.length + " analysed"
-          : all.length + " analysed · newest first")
-      : "no verdicts yet");
-
+    var signature = JSON.stringify([visible, query, BUYS_ONLY, SORT, LAST_VERDICTS === null, all.length, !all.length && serverRunning]);
+    if (signature === feedSignature) { return; }
+    feedSignature = signature;
     if (!all.length) {
-      feed.innerHTML = '<div class="empty">Nothing analysed yet. Pick a mode and start the panel.</div>';
-      renderedVerdicts = 0;
+      feed.innerHTML = '<div class="empty"><strong>' +
+        (LAST_VERDICTS === null ? 'Connecting to your research desk' : serverRunning ? 'Your research is underway' : 'Your next idea starts here') +
+        '</strong><p>' + (LAST_VERDICTS === null ? 'Research will appear here once the server connects.'
+          : serverRunning ? 'The panel is gathering evidence. Verdicts will appear as each company is assessed.'
+          : 'Choose a research mode and select Start analysis. Each verdict includes the evidence, risk levels and both time horizons.') + '</p></div>';
       return;
     }
     if (!shown.length) {
-      /* Saying so plainly beats an empty box. A screen that never returns
-         nothing is not screening, and in a risk-off regime BUYs are gated
-         deliberately rather than by accident. */
-      feed.innerHTML = '<div class="empty">None of the ' + all.length +
-        ' stocks analysed rated BUY for the multi-week horizon.<br>' +
-        'Untick “Long-term buys only” to see what the panel said about them.</div>';
-      renderedVerdicts = -1;
+      feed.innerHTML = '<div class="empty"><strong>No matching verdicts</strong><p>' +
+        (query ? 'No symbols or company names match “' + esc(SEARCH.trim()) + '”' + (BUYS_ONLY ? ' within positional BUYs.' : '.')
+          : 'None of the ' + all.length + ' analysed companies rated BUY for the multi-week horizon. Desk rules may hold back BUYs in risk-off conditions.') +
+        '</p><button type="button" class="ghost" data-clear-filters>Clear filters</button></div>';
       return;
     }
-    if (shown.length === renderedVerdicts) { return; }
 
-    feed.innerHTML = "";
-    shown.slice().reverse().forEach(function (v) {
-      var row = document.createElement("div");
+    var fragment = document.createDocumentFragment();
+    visible.forEach(function (v) {
+      var row = document.createElement("article");
       row.className = "row";
-      var dir = typeof v.day_change_pct !== "number" ? "flat"
-              : v.day_change_pct > 0 ? "up" : v.day_change_pct < 0 ? "down" : "flat";
+      row.tabIndex = -1;
+      row.setAttribute("aria-label", String(v.symbol || "Stock") + " research verdict");
+      var dir = dirClass(v.day_change_pct);
       var t = v.tracks || {};
       var anyFired = (t.intraday && t.intraday.fired) || (t.positional && t.positional.fired);
-
       row.innerHTML =
         '<div class="rowtop">' +
           '<div><div class="sym">' + esc(v.symbol) +
-            (anyFired ? '<span class="fired" title="Cleared the confidence threshold and ' +
-                        'was queued for Telegram">SIGNAL</span>' : '') + '</div>' +
+            (anyFired ? '<span class="fired" title="Cleared the confidence threshold and was queued for Telegram">SIGNAL</span>' : '') + '</div>' +
             '<div class="subtle">' + esc(v.name || "") +
             (v.cap_segment ? " · " + esc(v.cap_segment) + " cap" : "") +
-            (typeof v.rel_day_change_pct === "number"
-               ? ' · ' + pct(v.rel_day_change_pct) + ' vs index' : '') +
-            (v.data_gaps ? ' · ' + v.data_gaps + ' data gap(s)' : '') +
-            (v.ungrounded ? ' · ⚠ ' + v.ungrounded + ' unverified figure(s)' : '') +
+            (Number.isFinite(v.rel_day_change_pct) ? ' · ' + pct(v.rel_day_change_pct) + ' vs index' : '') +
+            (v.data_gaps ? ' · ' + esc(v.data_gaps) + ' data gap(s)' : '') +
+            (v.ungrounded ? ' · ⚠ ' + esc(v.ungrounded) + ' unverified figure(s)' : '') +
             '</div></div>' +
           '<div class="px"><span class="p">' + money(v.price) + '</span>' +
             '<span class="c ' + dir + '">' + pct(v.day_change_pct) + '</span></div>' +
         '</div>' +
-        '<div class="tracks">' +
-          trackCell("Intraday", t.intraday) +
-          trackCell("Positional", t.positional) +
-        '</div>';
-      feed.insertBefore(row, feed.firstChild);
+        '<div class="tracks">' + trackCell("Intraday", t.intraday) + trackCell("Positional", t.positional) + '</div>';
+      fragment.appendChild(row);
     });
-    renderedVerdicts = shown.length;
+    feed.replaceChildren(fragment);
   }
 
   function renderSectors(heat) {
+    var signature = JSON.stringify(heat);
+    if (signature === sectorSignature) { return; }
+    sectorSignature = signature;
     var rows = heat.rows || [];
     var head = el("secthead"), feed = el("sectfeed");
     if (!rows.length) { head.style.display = "none"; feed.style.display = "none"; return; }
@@ -1309,10 +583,13 @@
   }
 
   function dirClass(v) {
-    return typeof v !== "number" ? "flat" : v > 0 ? "up" : v < 0 ? "down" : "flat";
+    return !Number.isFinite(v) ? "flat" : v > 0 ? "up" : v < 0 ? "down" : "flat";
   }
 
   function renderOrderBook(book) {
+    var signature = JSON.stringify(book);
+    if (signature === bookSignature) { return; }
+    bookSignature = signature;
     var head = el("obhead"), feed = el("obfeed");
     var rows = book.qualifying || [];
     if (!book.generated) { head.style.display = "none"; feed.style.display = "none"; return; }
@@ -1394,26 +671,49 @@
 
   /* ---------------- start ---------------- */
 
-  el("start").addEventListener("click", function () {
-    hideBanner();
-    el("start").disabled = true;
-    fetch(api("/start"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: el("mode").value,
-        capital: parseFloat(el("capital").value) || null
-      })
-    }).then(function (r) { return r.json(); })
-      .then(function (out) {
-        if (!out.ok) { banner("err", out.error || "could not start the run"); el("start").disabled = false; }
-      })
-      .catch(function () {
-        banner("err", API ? "Could not reach the backend at " + API + "."
-                          : "Could not reach the local server.");
-        el("start").disabled = false;
+  function validateCapital() {
+    var input = el("capital");
+    var raw = input.value.trim();
+    var valid = !input.validity.badInput && (!raw || (Number.isFinite(Number(raw)) && Number(raw) > 0));
+    input.setAttribute("aria-invalid", valid ? "false" : "true");
+    if (el("capital-error")) {
+      el("capital-error").hidden = valid;
+      text(el("capital-error"), valid ? "" : "Enter a capital amount greater than zero, or leave it blank to use the default.");
+    }
+    return valid;
+  }
+  el("capital").addEventListener("input", validateCapital);
+
+  el("start").addEventListener("click", async function () {
+    if (!CFG || !connected || serverRunning || startPending || awaitingStart) { return; }
+    if (!validateCapital()) { el("capital").focus(); return; }
+    startPending = true; actionNotice = null; requestGeneration++;
+    hideBanner(); updateControls();
+    var capital = el("capital").value.trim();
+    try {
+      var out = await deskRequest("/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: el("mode").value, capital: capital ? Number(capital) : null })
       });
+      if (!out || !out.ok) { throw new Error((out && out.error) || "The server could not start the analysis."); }
+      awaitingStart = true; acceptedAt = Date.now();
+    } catch (error) {
+      // A lost response does not prove the server rejected the request. Check
+      // its state before allowing another POST, which could deliver signals.
+      connected = false; awaitingStart = true; acceptedAt = Date.now();
+      actionNotice = { kind: "err", message: "Could not confirm the analysis request. " +
+        (error.message || "Check your connection.") + " Checking the server before you can try again." };
+      banner(actionNotice.kind, actionNotice.message);
+    } finally {
+      startPending = false; requestGeneration++;
+      updateControls(); requestPoll();
+    }
   });
+
+  renderFeed(null);
+  updateControls();
+  requestPoll();
 })();
 </script>
 </body>

@@ -1,0 +1,14 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": ["."],
+  "locale": "en-IN",
+  "canonicalMap": "UX-CONTRACT.md",
+  "requiredCapabilities": ["Select/Listbox", "Form", "Scrollbar", "Toast"],
+  "ownership": { "Select/Listbox": "native" },
+  "requiredCommands": ["build", "unit"],
+  "commands": {
+    "build": "python build_web.py",
+    "unit": "python -B -m unittest discover -s tests -p 'test_*.py' -v"
+  },
+  "evidence": { "failurePaths": "tests/shared_request.test.cjs" }
+}

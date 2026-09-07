@@ -32,10 +32,44 @@ python app.py
 ```
 
 Open <http://127.0.0.1:5000> (it opens by itself), pick a mode, press
-**Start agents**.
+**Start analysis**.
 
 Start with **Demo** — it runs fully offline. Use **Live** during market hours
 (NSE: Mon–Fri, 09:15–15:30 IST).
+
+### Research workspace
+
+The overview, intraday desk, quality screen and IPO desk share a responsive
+navigation shell and remembered light/dark themes. The overview puts verdicts
+first, with stock search, confidence/name sorting, a buy-only filter and an
+explicit load-more action. Idle polling runs every ten seconds and pauses in
+hidden tabs; active analysis updates every second.
+
+Shared UI sources are `shared_styles.css`, `shared_shell.html`,
+`shared_head.html` and `shared_desk.js`. `page_render.py` includes them for
+both Flask and the static build. After editing any page or shared component,
+run `python build_web.py` (include your existing `--api` value for a separate
+backend) and commit the generated `web/` files too.
+
+For a safe visual preview with illustrative data and no external side effects:
+
+```bash
+python tests/preview_server.py --port 5174
+```
+
+Open `http://127.0.0.1:5174`. Add `?scenario=empty`, `?scenario=error`,
+`?scenario=slow`, or `?scenario=loaded` to exercise the UI states.
+This separate preview does not import the application, read credentials,
+send Telegram messages or write paper-account data.
+
+Frontend verification (Python standard library; Node required for JS checks):
+
+```bash
+python -B -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+See `DESIGN.md`, `UX-CONTRACT.md` and `tests/UI-QA.md` for the visual system,
+interaction contract and verification coverage.
 
 ---
 
