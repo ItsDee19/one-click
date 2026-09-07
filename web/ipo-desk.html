@@ -87,13 +87,13 @@
 
   body::before{
     content:"";position:fixed;inset:0 0 auto 0;height:340px;pointer-events:none;
-    background:radial-gradient(60% 100% at 50% 0%,
+    background-image:radial-gradient(60% 100% at 50% 0%,
       rgba(var(--accent-glow),.07), transparent 70%);
     z-index:0;
   }
   .wrap > *{position:relative;z-index:1;}
 
-  ::selection{background:rgba(var(--accent-glow),.28);}
+  ::selection{background-color:rgba(var(--accent-glow),.28);}
 
   @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
   .enter{animation:rise .5s cubic-bezier(.2,.7,.3,1) both;}
@@ -107,7 +107,7 @@
   .brandline{display:flex;align-items:center;gap:13px;min-width:0;}
   .mark{
     width:40px;height:40px;border-radius:12px;flex:none;
-    background:linear-gradient(140deg, var(--accent), rgba(var(--accent-glow),.55));
+    background-image:linear-gradient(140deg, var(--accent), rgba(var(--accent-glow),.55));
     color:#03121a;display:grid;place-items:center;
     box-shadow:0 0 0 1px rgba(var(--accent-glow),.35),
                0 10px 30px -12px rgba(var(--accent-glow),.8);
@@ -116,7 +116,7 @@
   .mark svg{position:relative;z-index:1;}
   .mark::after{
     content:"";position:absolute;inset:0;
-    background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.5) 50%,transparent 60%);
+    background-image:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.5) 50%,transparent 60%);
     transform:translateX(-120%);animation:sheen 6s ease-in-out infinite;
   }
   @keyframes sheen{0%,72%{transform:translateX(-120%);}88%,100%{transform:translateX(120%);}}
@@ -137,7 +137,7 @@
 
   button.ghost{
     border:1px solid var(--border-strong);border-radius:10px;
-    background:var(--card);color:var(--ink-2);
+    background-color:var(--card);color:var(--ink-2);
     padding:9px 12px;font:inherit;font-size:13px;cursor:pointer;
     transition:border-color .18s ease, background-color .18s ease, color .18s ease;
     display:grid;place-items:center;
@@ -148,7 +148,7 @@
   .back-btn{
     display:inline-flex;align-items:center;gap:8px;
     padding:9px 16px;border-radius:10px;
-    background:var(--card);border:1px solid var(--border-strong);
+    background-color:var(--card);border:1px solid var(--border-strong);
     color:var(--ink-2);font:inherit;font-size:13px;font-weight:600;
     cursor:pointer;text-decoration:none;
     transition:border-color .18s ease, color .18s ease, background-color .18s ease;
@@ -168,13 +168,13 @@
   }
   .sechead h2::after{
     content:"";height:1px;width:52px;
-    background:linear-gradient(90deg,var(--border-strong),transparent);
+    background-image:linear-gradient(90deg,var(--border-strong),transparent);
   }
   .sechead .note{font-size:12px;color:var(--muted);}
 
   /* ---------------- feed card ---------------- */
   .feed{
-    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    background-color:var(--card);border:1px solid var(--border);border-radius:var(--radius);
     box-shadow:var(--shadow);overflow:hidden;
   }
 
@@ -197,13 +197,13 @@
     padding:4px 0;width:74px;border-radius:7px;
     font-size:10px;font-weight:750;letter-spacing:.08em;
   }
-  .badge.BUY{background:var(--green-soft);color:var(--green);}
-  .badge.WATCH{background:var(--amber-soft);color:var(--amber);}
-  .badge.AVOID{background:var(--red-soft);color:var(--red);}
-  .badge.UNAVAILABLE{background:var(--unavailable-soft);color:var(--faint);width:96px;}
-  .badge.APPLY{background:var(--green-soft);color:var(--green);}
-  .badge.NEUTRAL{background:var(--amber-soft);color:var(--amber);}
-  .badge.UNKNOWN{background:var(--unavailable-soft);color:var(--faint);}
+  .badge.BUY{background-color:var(--green-soft);color:var(--green);}
+  .badge.WATCH{background-color:var(--amber-soft);color:var(--amber);}
+  .badge.AVOID{background-color:var(--red-soft);color:var(--red);}
+  .badge.UNAVAILABLE{background-color:var(--unavailable-soft);color:var(--faint);width:96px;}
+  .badge.APPLY{background-color:var(--green-soft);color:var(--green);}
+  .badge.NEUTRAL{background-color:var(--amber-soft);color:var(--amber);}
+  .badge.UNKNOWN{background-color:var(--unavailable-soft);color:var(--faint);}
 
   /* ---------------- IPO desk ---------------- */
   .ipo{
@@ -212,7 +212,7 @@
     transition:background-color .2s ease;
   }
   .ipo:first-child{border-top:0;}
-  .ipo:hover{background:var(--card-low);}
+  .ipo:hover{background-color:var(--card-low);}
   .ipotop{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:9px;}
   .ipotop .band{margin-left:auto;font-size:12.5px;font-weight:640;
                 font-variant-numeric:tabular-nums;white-space:nowrap;}
@@ -231,15 +231,15 @@
   .ipoflag{
     display:inline-block;margin-top:7px;margin-right:6px;font-size:10px;font-weight:700;
     letter-spacing:.05em;padding:3px 8px;border-radius:6px;
-    color:var(--amber);background:var(--amber-soft);
+    color:var(--amber);background-color:var(--amber-soft);
   }
-  .ipoflag.unofficial{color:var(--faint);background:var(--unavailable-soft);}
-  .ipoflag.ok{color:var(--green);background:var(--green-soft);}
+  .ipoflag.unofficial{color:var(--faint);background-color:var(--unavailable-soft);}
+  .ipoflag.ok{color:var(--green);background-color:var(--green-soft);}
   .wchip{
     font-size:9px;font-weight:750;letter-spacing:.09em;text-transform:uppercase;
-    padding:3px 8px;border-radius:5px;background:var(--unavailable-soft);color:var(--faint);
+    padding:3px 8px;border-radius:5px;background-color:var(--unavailable-soft);color:var(--faint);
   }
-  .wchip.open{background:var(--accent-soft);color:var(--accent);}
+  .wchip.open{background-color:var(--accent-soft);color:var(--accent);}
 
   /* ---------------- loading shimmer ---------------- */
   .loading{
