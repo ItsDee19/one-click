@@ -16,6 +16,11 @@ backtest_5y.json
 .drhp_cache/
 quality_screen.json
 .quality_screen_progress.json
+.stock_universe_cache.json
+.intelligence_cache/
+intelligence.db
+intelligence.db-journal
+.runtime/
 
 # local static audit evidence (machine-specific paths)
 tests/premium-audit.json

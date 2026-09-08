@@ -20,6 +20,7 @@ import json
 import os
 
 import data_sources
+import evidence_quality
 import market
 import strategies
 
@@ -73,7 +74,6 @@ def scan(log=None, universe=None):
     record, blob = load_record()
 
     trading = market.is_trading_day(log=say)
-    phase = market.phase_from_clock()
     if not trading.get("trading"):
         return {"generated": data_sources.now_ist_str(), "picks": [],
                 "tradeable": False,
@@ -81,7 +81,7 @@ def scan(log=None, universe=None):
                 "strategies": record, "record_window": (blob or {}).get("window"),
                 "swing": _swing_payload()}
 
-    universe = universe or data_sources.load_universe()
+    universe = data_sources.load_full_exchange(log=say) if universe is None else universe
     entries = [dict(e, bucket=b) for b, rows in universe.items() for e in rows]
 
     # fetch_quotes returns (quotes, benchmark) — it also hands back RVOL already
@@ -100,15 +100,25 @@ def scan(log=None, universe=None):
     frames = data_sources.fetch_intraday(tickers, log=say)
 
     picks = []
+    available, stale = 0, 0
+    session_observations = {}
     for entry in entries:
         ticker = entry["ticker"]
         frame = frames.get(ticker)
         if frame is None or getattr(frame, "empty", True):
             continue
 
+        observed = evidence_quality.parse_timestamp(frame.index[-1])
+        now = market.now_ist()
+        if not _session_is_fresh(observed, now):
+            stale += 1
+            continue
+        available += 1
+        session_observations[ticker] = observed
+
         quote = by_ticker.get(ticker) or {}
         bars = _bars_from(frame)
-        s = strategies.session(bars, prev_close=_prev_close(quote),
+        s = strategies.session(bars, prev_close=_prev_close(quote, observed.date()),
                                rvol=quote.get("rvol"))
         if not s:
             continue
@@ -117,7 +127,9 @@ def scan(log=None, universe=None):
             setup = result["setup"]
             stat = record.get(name) or {}
             picks.append({
+                "ticker": ticker,
                 "symbol": ticker.split(".")[0],
+                "as_of": observed.isoformat(),
                 "name": entry.get("name"),
                 "sector": entry.get("sector"),
                 "bucket": entry.get("bucket"),
@@ -143,6 +155,16 @@ def scan(log=None, universe=None):
                 },
             })
 
+    # A whole-exchange pass can cross market close or outlive early snapshots.
+    # Recheck at publication time before choosing the displayed setups.
+    completed_at = market.now_ist()
+    expired = {ticker for ticker, observed in session_observations.items()
+               if not _session_is_fresh(observed, completed_at)}
+    available -= len(expired)
+    stale += len(expired)
+    picks = [pick for pick in picks if pick["ticker"] not in expired]
+    phase = market.phase_from_clock(completed_at)
+
     # expectancy first: a rule that wins more often but earns less per unit of
     # risk should not outrank one that earns more.
     picks.sort(key=lambda p: (p["record"].get("expectancy_r") or -99,
@@ -152,6 +174,9 @@ def scan(log=None, universe=None):
     say(f"intraday desk: {len(picks)} setup(s) from {len(strategies.STRATEGIES)} strategies")
     return {
         "generated": data_sources.now_ist_str(),
+        "coverage": {"listed": len(entries), "usable_sessions": available,
+                     "stale_sessions": stale, "missing_sessions": len(entries) - available - stale,
+                     "universe": data_sources.LAST_UNIVERSE_METADATA},
         "tradeable": phase in ("regular", "open"),
         "phase": phase,
         "picks": picks,
@@ -165,19 +190,33 @@ def scan(log=None, universe=None):
     }
 
 
-def _prev_close(quote):
-    """
-    Yesterday's close, from the daily frame the screener already downloaded.
+def _session_is_fresh(observed, moment):
+    return (observed is not None and observed.date() == moment.date()
+            and -5 <= (moment - observed).total_seconds() / 60 <= evidence_quality.MAX_INTRADAY_AGE_MINUTES)
 
-    During a live session the last daily row is today's forming bar, so the
-    previous close is the one before it — the same convention the screener
-    itself uses to compute the day change.
+
+def _prev_close(quote, session_date=None):
+    """
+    Latest available daily close strictly before the intraday session date.
+
+    The daily response may include today's forming candle or may still end
+    yesterday. Selecting by date handles both without shifting the gap base.
     """
     frame = quote.get("frame")
     if frame is None or getattr(frame, "empty", True):
         return None
-    closes = data_sources._series_values(frame, "Close")
-    return closes[-2] if len(closes) >= 2 else None
+    session_date = session_date or market.now_ist().date()
+    if "Close" not in frame:
+        return None
+    previous, latest = None, None
+    for stamp, raw in frame["Close"].items():
+        observed = evidence_quality.parse_timestamp(stamp)
+        close = evidence_quality.finite_number(raw)
+        if observed is None or observed.date() >= session_date or close is None or close <= 0:
+            continue
+        if latest is None or observed > latest:
+            latest, previous = observed, close
+    return previous
 
 
 def _bars_from(frame):

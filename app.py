@@ -25,9 +25,11 @@ from datetime import datetime, timedelta, timezone
 from flask import Flask, Response, jsonify, request
 
 import data_sources
+import evidence_quality
 import drhp
 import fundamentals
 import history
+from intelligence_store import IntelligenceStore
 import intraday_desk
 import ipo
 import llm
@@ -204,6 +206,7 @@ def fresh_state():
         "started_at": None,
         "finished_at": None,
         "data_ts": None,
+        "coverage": {},
         "kpis": {
             "universe": 0, "in_debate": 0, "buy_signals": 0,
             "intraday_signals": 0, "positional_signals": 0,
@@ -675,6 +678,7 @@ def _verdict_row(evidence, result, threshold):
         track = dict((result.get("tracks") or {}).get(name) or {})
         confidence = track.get("confidence")
         qualifies = (track.get("verdict") == "BUY"
+                     and track.get("actionable") is True
                      and confidence is not None
                      and confidence >= threshold)
 
@@ -754,15 +758,19 @@ def active_universe(log=None):
     """
     The universe this run should look at.
 
-    FULL_EXCHANGE=1 screens every liquid EQ-series company the NSE lists,
-    which is slower but means the shortlist is not limited to names someone
-    picked in advance. Anything else uses the curated universe.json.
+    Full NSE main-board and SME trading-list coverage is the default.
+    FULL_EXCHANGE=0 is an explicit opt-in to the legacy curated list.
     """
     say = log or (lambda _m: None)
-    if env_str("FULL_EXCHANGE") in ("1", "true", "yes"):
+    if env_str("FULL_EXCHANGE", "1").lower() not in ("0", "false", "no"):
         universe = data_sources.load_full_exchange(log=say)
     else:
         universe = data_sources.load_universe()
+        data_sources.LAST_UNIVERSE_METADATA = {
+            "scope": "curated universe.json", "source": "curated", "degraded": False,
+            "listed_count": data_sources.universe_size(universe),
+            "exclusions": ["Stocks absent from the explicitly selected curated list"],
+        }
         say(f"universe.json: {data_sources.universe_size(universe)} tickers "
             f"across {len(universe)} buckets")
     return universe
@@ -779,6 +787,9 @@ def _run_side_desks(mode, universe):
     # Sector heatmap + book-to-sales screen. Both run off data the scan
     # already fetched, so they cost one extra request between them.
     if mode == "live":
+        known_sectors = {q["ticker"]: q.get("sector") for rows in data_sources.LAST_QUOTES.values() for q in rows}
+        universe = {bucket: [dict(e, sector=known_sectors.get(e["ticker"]) or e.get("sector")) for e in rows]
+                    for bucket, rows in universe.items()}
         try:
             heat = sectors.heatmap(data_sources.LAST_QUOTES, log=log)
             with LOCK:
@@ -848,8 +859,10 @@ def _run_fundamentalist(shortlist):
                   stat2=f"{avg:+.1f}%" if avg is not None else "n/a")
         pace(0.12)
     set_agent("fundamentalist", status="done")
-    log(f"fundamentalist covered {covered}/{len(shortlist)} with analyst targets "
-        f"(feed carries no P/E or ROE — target-based view only)")
+    metrics = sum(any((b.get("fundamentals") or {}).get(k) is not None
+                      for k in ("trailing_pe", "roe_pct", "revenue_growth_pct")) for b in shortlist)
+    log(f"fundamentalist: {metrics}/{len(shortlist)} with company metrics; "
+        f"{covered}/{len(shortlist)} with analyst targets")
     pace()
 
 
@@ -966,6 +979,13 @@ def _run_judge(results, threshold, run_id, limits, mode):
     set_agent("judge", status="working")
     rows, buys = [], 0
     for index, (bundle, result) in enumerate(results, start=1):
+        # A long provider/LLM run can outlive the evidence that began it.
+        if mode == "live":
+            bundle["market"] = market.describe()
+        quality = evidence_quality.assess_evidence(bundle)
+        for block in result.get("tracks", {}).values():
+            scoring._apply_evidence_gate(block, bundle, quality)
+        result["evidence_quality"] = quality
         row = _verdict_row(bundle, result, threshold)
         rows.append(row)
         buys = sum(1 for t in row["tracks"].values() if t.get("verdict") == "BUY") + buys
@@ -1127,8 +1147,13 @@ def run_cycle(mode, capital=None):
         pace()
         if mode == "live":
             universe = active_universe(log=log)
+            def coverage_progress(coverage):
+                with LOCK:
+                    STATE["coverage"] = coverage
+                set_agent("scout", stat1=coverage.get("analyzed", 0),
+                          stat2=coverage.get("debate_selected", 0))
             universe_count, shortlist = data_sources.scan_live(
-                universe, shortlist_per_bucket, log=log)
+                universe, shortlist_per_bucket, log=log, progress=coverage_progress)
         else:
             bundles, shortlist = data_sources.scan_demo(shortlist_per_bucket, log=log)
             universe_count = len(bundles)
@@ -1151,6 +1176,8 @@ def run_cycle(mode, capital=None):
             + ", ".join(b["symbol"] for b in shortlist))
         pace()
 
+        if mode == "live":
+            shortlist = data_sources.refresh_evidence(shortlist, log=log)
         _run_technician(shortlist)
         _run_fundamentalist(shortlist)
         _run_newsdesk(shortlist)
@@ -1246,6 +1273,9 @@ def _public_track(track):
         "net": track.get("net"),
         "fired": bool(track.get("fired")),
         "gated": bool(track.get("gated")),
+        "actionable": bool(track.get("actionable")),
+        "evidence_blockers": track.get("evidence_blockers") or [],
+        "confidence_basis": track.get("confidence_basis"),
         "regime_gated": bool(track.get("regime_gated")),
         "suppressed": track.get("suppressed"),
         "risk_reward": track.get("risk_reward") or {},
@@ -1337,10 +1367,18 @@ def quality_desk_page():
 @app.get("/config")
 def config():
     provider = llm.detect_provider()
+    full_exchange = env_str("FULL_EXCHANGE", "1").lower() not in ("0", "false", "no")
+    counts_basis = "curated universe.json"
     try:
-        universe = data_sources.load_universe()
-        counts = {bucket: len(entries) for bucket, entries in universe.items()}
-        total = data_sources.universe_size(universe)
+        if full_exchange:
+            coverage = IntelligenceStore().coverage()
+            counts = (coverage.get("universe") or {}).get("bucket_counts", {})
+            total = coverage.get("listed", 0)
+            counts_basis = "last scan discovery" if coverage.get("run_id") else "pending first discovery"
+        else:
+            universe = data_sources.load_universe()
+            counts = {bucket: len(entries) for bucket, entries in universe.items()}
+            total = data_sources.universe_size(universe)
     except Exception as exc:                                       # noqa: BLE001
         counts, total = {}, 0
         log(f"universe.json could not be read: {type(exc).__name__}")
@@ -1359,7 +1397,10 @@ def config():
         "confidence_threshold": env_int("CONFIDENCE_THRESHOLD", 7),
         "shortlist_per_bucket": env_int("SHORTLIST_PER_BUCKET", 4),
         "telegram_configured": telegram_configured(),
-        "universe": {"total": total, "buckets": counts},
+        "universe": {"total": total, "buckets": counts, "counts_basis": counts_basis,
+                     "mode": "full_exchange" if full_exchange else "curated"},
+        "intelligence": {"research_scope": env_str("INTELLIGENCE_RESEARCH_SCOPE", "all"),
+                         "coverage_url": "/coverage", "results_url": "/intelligence"},
         "demo_bundles": len(data_sources.load_demo_bundles()),
         "db": os.path.basename(DB_PATH),
         "market": market.describe(),
@@ -1454,7 +1495,7 @@ def sectors_route():
     if heat:
         return jsonify(heat)
     try:
-        quotes, _bench = data_sources.fetch_quotes(data_sources.load_universe(), log=log)
+        quotes, _bench = data_sources.fetch_quotes(active_universe(log=log), log=log)
         return jsonify(sectors.heatmap(quotes, log=log))
     except Exception as exc:                                       # noqa: BLE001
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
@@ -1508,7 +1549,7 @@ def ipos_route():
 def intraday_route():
     """Today's intraday setups, each from a named and separately measured rule."""
     try:
-        return jsonify(intraday_desk.scan(log=log))
+        return jsonify(intraday_desk.scan(log=log, universe=active_universe(log=log)))
     except Exception as exc:                                       # noqa: BLE001
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 
@@ -1540,7 +1581,7 @@ def quality_route():
 def orderbook_route():
     """Stocks whose order book exceeds their latest quarterly sales."""
     try:
-        return jsonify(fundamentals.screen(data_sources.load_universe(), log=log))
+        return jsonify(fundamentals.screen(active_universe(log=log), log=log))
     except Exception as exc:                                       # noqa: BLE001
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 
@@ -1608,6 +1649,40 @@ def status():
     snapshot["market"] = market.describe()
     snapshot["regime"] = market.regime()
     return jsonify(snapshot)
+
+
+@app.get("/coverage")
+def coverage_route():
+    """Actual discovery, research and failure counts; never a nominal stock count."""
+    return jsonify(IntelligenceStore().coverage())
+
+
+@app.get("/intelligence")
+def intelligence_route():
+    """Search every analyzed stock, including names outside the debate shortlist."""
+    try:
+        limit = max(1, min(500, int(request.args.get("limit", "100"))))
+        offset = max(0, int(request.args.get("offset", "0")))
+        run_id = int(request.args["run_id"]) if request.args.get("run_id") else None
+        if offset > 2**63 - 1 or (run_id is not None and not 1 <= run_id <= 2**63 - 1):
+            raise ValueError("pagination outside database range")
+    except (ValueError, TypeError):
+        return jsonify({"error": "limit/offset must be valid integers; run_id must be a positive 64-bit integer"}), 400
+    return jsonify(IntelligenceStore().query(
+        run_id=run_id, search=request.args.get("search", "")[:200],
+        status=request.args.get("status"), limit=limit, offset=offset,
+        include_evidence=request.args.get("evidence") == "1"))
+
+
+@app.get("/intelligence.csv")
+def intelligence_csv_route():
+    """Download the entire latest stored scan, including missing-data records."""
+    import io
+    import intelligence
+    output = io.StringIO(newline="")
+    intelligence.write_csv(IntelligenceStore(), output)
+    return Response(output.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="all-stock-analysis.csv"'})
 
 
 # ==========================================================================

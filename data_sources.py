@@ -4,7 +4,7 @@ data_sources.py — evidence bundles for the agent panel.
 Two modes, one output shape:
 
   demo : read pre-built bundles from demo_data/*.json (fully offline)
-  live : pull NSE data through yfinance for the tickers in universe.json
+  live : discover NSE main-board/SME equities and collect bounded yfinance data
 
 Everything downstream (scoring.py, llm.py, app.py) only ever sees the
 normalised bundle produced here, so the engines cannot tell the two apart.
@@ -12,9 +12,8 @@ normalised bundle produced here, so the engines cannot tell the two apart.
 Rules that matter:
   * a value that could not be computed is None *and* named in data_gaps
   * we never guess, interpolate or carry forward a missing number
-  * this feed carries no raw fundamental ratios (P/E, ROE, margins). The only
-    "fundamental" view available is the sell-side analyst block, and the
-    bundle says so explicitly in `notes`.
+  * fundamental metrics retain their provider and freshness metadata; missing
+    accounting ratios are never inferred from analyst recommendations.
 """
 
 from __future__ import annotations
@@ -24,7 +23,10 @@ import json
 import math
 import os
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from statistics import median
 
 import market
 
@@ -37,7 +39,7 @@ DEMO_DIR = os.path.join(HERE, "demo_data")
 UNIVERSE_FILE = os.path.join(HERE, "universe.json")
 
 SMA_PERIOD = 20            # N-day simple moving average used for price_vs_sma_pct
-HISTORY_PERIOD = "1mo"     # ~1 month of daily OHLC
+HISTORY_PERIOD = "2y"      # enough history for long-trend and swing rules on every stock
 BENCHMARK = "^NSEI"        # NIFTY 50 — the yardstick for relative strength
 BENCHMARK_NAME = "NIFTY 50"
 INTRADAY_INTERVAL = "5m"   # granularity for VWAP / opening range
@@ -45,11 +47,13 @@ OPENING_RANGE_BARS = 3     # first 3 x 5m bars = the 09:15-09:30 opening range
 ATR_PERIOD = 14
 IST = timezone(timedelta(hours=5, minutes=30))
 
-BUCKETS = ("large", "mid", "small")
+BUCKETS = ("large", "mid", "small", "unclassified")
 
 # The most recent screen's quotes, so the sector heatmap can compute breadth
 # without paying for a second download of the same bars.
 LAST_QUOTES = {}
+LAST_UNIVERSE_METADATA = {}
+LAST_COVERAGE = {}
 
 NO_RATIOS_NOTE = (
     "Feed carries no raw fundamental ratios (P/E, P/B, ROE, margins, debt). "
@@ -94,7 +98,7 @@ def _clean(value):
         return None
     try:
         out = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     if math.isnan(out) or math.isinf(out):
         return None
@@ -111,62 +115,10 @@ def now_ist_str() -> str:
 
 
 def load_full_exchange(log=None) -> dict:
-    """
-    Every EQ-series company the NSE lists, bucketed by traded value.
-
-    universe.json is a curated 164 names; this is the whole exchange, for when
-    the panel should look at everything rather than at a list someone chose.
-    Buckets are assigned from turnover rather than a market-cap lookup,
-    because that costs one batched download instead of 2,500 separate calls
-    and is what the shortlist actually cares about.
-
-    BSE is not included: its list endpoint currently answers 404, and
-    BSE-only names are overwhelmingly too illiquid to trade. Saying so is
-    better than implying coverage that is not there.
-    """
-    import quality_screen
-    say = log or (lambda _m: None)
-
-    listed = quality_screen.fetch_nse_list(log=say)
-    if not listed:
-        say("full-exchange list unavailable — falling back to universe.json")
-        return load_universe()
-
-    yf = _import_yf()
-    scored = []
-    chunk = 200
-    for start in range(0, len(listed), chunk):
-        batch = listed[start:start + chunk]
-        try:
-            data = yf.download(" ".join(e["ticker"] for e in batch), period="1mo",
-                               interval="1d", group_by="ticker", auto_adjust=False,
-                               actions=False, progress=False, threads=True)
-        except Exception:                                          # noqa: BLE001
-            continue
-        for entry in batch:
-            try:
-                frame = data[entry["ticker"]] if len(batch) > 1 else data
-                closes = [c for c in frame["Close"].tolist() if c == c]
-                volumes = [v for v in frame["Volume"].tolist() if v == v]
-            except Exception:                                      # noqa: BLE001
-                continue
-            if not closes or not volumes:
-                continue
-            turnover_cr = closes[-1] * (sum(volumes) / len(volumes)) / 1e7
-            if turnover_cr >= 1.0:      # a crore a day, or it cannot be traded
-                scored.append((turnover_cr, entry))
-        say(f"  exchange scan: {min(start + chunk, len(listed))}/{len(listed)}, "
-            f"{len(scored)} liquid enough to consider")
-
-    scored.sort(key=lambda row: row[0], reverse=True)
-    third = max(1, len(scored) // 3)
-    universe = {"large": [], "mid": [], "small": []}
-    for index, (_turnover, entry) in enumerate(scored):
-        bucket = "large" if index < third else "mid" if index < 2 * third else "small"
-        universe[bucket].append({"ticker": entry["ticker"], "name": entry["name"],
-                                 "sector": None})
-    say(f"full exchange: {len(scored)} tradeable names "
-        f"({len(universe['large'])}/{len(universe['mid'])}/{len(universe['small'])})")
+    """All equities in the official NSE trading lists; never filter by liquidity."""
+    import stock_universe
+    universe, metadata = stock_universe.load_exchange_universe(log=log)
+    globals()["LAST_UNIVERSE_METADATA"] = metadata
     return universe
 
 
@@ -257,7 +209,7 @@ def _empty_evidence(symbol, name, ticker, bucket, sector):
         },
         "intraday": _empty_intraday("not built"),
         "market": market.describe(),
-        "regime": market.regime(),
+        "regime": {"state": "unknown", "reason": "regime evidence not supplied"},
         "relative": {
             "benchmark": BENCHMARK_NAME, "benchmark_day_change_pct": None,
             "benchmark_window_return_pct": None, "rel_day_change_pct": None,
@@ -292,7 +244,7 @@ def _finalise_gaps(evidence: dict) -> dict:
             elif value is None and path not in gaps:
                 gaps.append(path)
 
-    for section in ("price", "range_52w", "technicals", "analyst", "news"):
+    for section in ("price", "range_52w", "technicals", "analyst", "news", "fundamentals"):
         walk(section, evidence.get(section) or {})
 
     if not evidence.get("sector"):
@@ -327,7 +279,7 @@ def load_demo_bundles(demo_dir: str = DEMO_DIR) -> list:
         bundle.setdefault("intraday", _empty_intraday(
             "demo bundle — a frozen snapshot has no live session to read"))
         bundle.setdefault("market", market.describe())
-        bundle.setdefault("regime", market.regime())
+        bundle.setdefault("regime", {"state": "unknown", "reason": "offline demo snapshot"})
         # a frozen bundle has no index alongside it and no forward calendar
         bundle.setdefault("relative", {
             "benchmark": BENCHMARK_NAME, "benchmark_day_change_pct": None,
@@ -359,13 +311,101 @@ def _frame_for(downloaded, ticker, single):
     """Pull one ticker's OHLC frame out of a yf.download result."""
     if downloaded is None or getattr(downloaded, "empty", True):
         return None
-    if single:
-        return downloaded
+    if getattr(downloaded.columns, "nlevels", 1) == 1:
+        return _valid_frame(downloaded) if single else None
     try:
         frame = downloaded[ticker]
     except (KeyError, TypeError):
+        try:
+            frame = downloaded.xs(ticker, axis=1, level=1)
+        except (KeyError, TypeError, ValueError):
+            return None
+    return _valid_frame(frame)
+
+
+def _valid_frame(frame):
+    """Keep OHLCV rows aligned: dropping each column separately corrupts bars."""
+    if frame is None or getattr(frame, "empty", True):
         return None
-    return None if getattr(frame, "empty", True) else frame
+    required = ["Open", "High", "Low", "Close", "Volume"]
+    if any(c not in frame.columns for c in required):
+        return None
+    import pandas as pd
+    frame = frame[required].copy().apply(pd.to_numeric, errors="coerce")
+    frame = frame.replace([float("inf"), -float("inf")], float("nan"))
+    try:
+        frame.index = pd.to_datetime(frame.index, errors="coerce")
+    except (TypeError, ValueError):
+        return None
+    frame = frame[~frame.index.isna()]
+    frame = frame.dropna(subset=required).sort_index()
+    frame = frame[~frame.index.duplicated(keep="last")]
+    frame = frame[(frame[["Open", "High", "Low", "Close"]] > 0).all(axis=1)
+                  & (frame["Volume"] >= 0) & (frame["High"] >= frame["Low"])
+                  & (frame["High"] >= frame[["Open", "Close"]].max(axis=1))
+                  & (frame["Low"] <= frame[["Open", "Close"]].min(axis=1))]
+    return None if frame.empty else frame
+
+
+def _session_frame(frame, moment=None):
+    """Aligned bars belonging to today's NSE continuous session, in IST."""
+    frame = _valid_frame(frame)
+    if frame is None:
+        return None
+    moment = moment or market.now_ist()
+    moment = moment.replace(tzinfo=IST) if moment.tzinfo is None else moment.astimezone(IST)
+    try:
+        frame.index = (frame.index.tz_localize(IST) if frame.index.tz is None
+                       else frame.index.tz_convert(IST))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    start = moment.replace(hour=9, minute=15, second=0, microsecond=0)
+    close = moment.replace(hour=15, minute=30, second=0, microsecond=0)
+    frame = frame[(frame.index >= start) & (frame.index < close) & (frame.index <= moment)]
+    return None if frame.empty else frame
+
+
+def _setting_int(key, default, low=1, high=500):
+    try:
+        return max(low, min(high, int(os.environ.get(key, default))))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def download_frames(tickers, period=HISTORY_PERIOD, interval="1d", log=None):
+    """Bounded batches and retries; a failing symbol cannot discard its peers."""
+    say = log or (lambda _m: None)
+    tickers = list(dict.fromkeys(tickers))
+    frames = {}
+    if not tickers:
+        return frames
+    yf = _import_yf()
+    size = _setting_int("MARKET_BATCH_SIZE", 100, high=200)
+    workers = _setting_int("MARKET_DOWNLOAD_THREADS", 4, high=8)
+    retries = _setting_int("MARKET_DOWNLOAD_RETRIES", 1, low=0, high=2)
+    timeout = _setting_int("MARKET_DATA_TIMEOUT", 15, high=60)
+    for start in range(0, len(tickers), size):
+        pending = tickers[start:start + size]
+        for attempt in range(retries + 1):
+            try:
+                downloaded = yf.download(tickers=pending, period=period, interval=interval,
+                                         group_by="ticker", auto_adjust=False, actions=False,
+                                         progress=False, threads=workers, timeout=timeout)
+            except Exception as exc:
+                say(f"{interval} batch failed ({type(exc).__name__}), attempt {attempt + 1}")
+                downloaded = None
+            for ticker in pending:
+                frame = _frame_for(downloaded, ticker, len(pending) == 1)
+                if frame is not None:
+                    frames[ticker] = frame
+            pending = [ticker for ticker in pending if ticker not in frames]
+            if not pending:
+                break
+            if attempt < retries:
+                time.sleep(min(2 ** attempt, 4))
+        say(f"{interval} coverage: attempted {min(start + size, len(tickers))}/{len(tickers)}, "
+            f"{len(frames)} with usable bars")
+    return frames
 
 
 def _series_values(frame, column):
@@ -417,7 +457,6 @@ def fetch_quotes(universe: dict, log=None) -> dict:
     Returns {bucket: [ {ticker,name,sector,bucket,day_change_pct,frame}, ... ]}
     so the caller can screen before paying for .info / .news per stock.
     """
-    yf = _import_yf()
     say = log or (lambda _m: None)
 
     tickers = [e["ticker"] for bucket in BUCKETS for e in universe.get(bucket, [])]
@@ -427,19 +466,9 @@ def fetch_quotes(universe: dict, log=None) -> dict:
     # The NIFTY rides along in the same request. Without it there is no way to
     # tell a stock that is genuinely strong from one drifting up with the index.
     say(f"downloading {HISTORY_PERIOD} daily OHLC for {len(tickers)} tickers + {BENCHMARK_NAME}")
-    downloaded = yf.download(
-        tickers=" ".join(tickers + [BENCHMARK]),
-        period=HISTORY_PERIOD,
-        interval="1d",
-        group_by="ticker",
-        auto_adjust=False,
-        actions=False,
-        progress=False,
-        threads=True,
-    )
-    single = False          # always at least the benchmark alongside a ticker
+    downloaded = download_frames(tickers + [BENCHMARK], log=say)
 
-    benchmark = _benchmark_block(_frame_for(downloaded, BENCHMARK, single))
+    benchmark = _benchmark_block(downloaded.get(BENCHMARK))
     if benchmark.get("day_change_pct") is not None:
         say(f"{BENCHMARK_NAME} {benchmark['day_change_pct']:+.2f}% today, "
             f"{benchmark['window_return_pct']:+.2f}% over the window")
@@ -455,13 +484,14 @@ def fetch_quotes(universe: dict, log=None) -> dict:
     sector_moves = {}
     for bucket in BUCKETS:
         for entry in universe.get(bucket, []):
-            frame = _frame_for(downloaded, entry["ticker"], single)
+            frame = downloaded.get(entry["ticker"])
             closes = _series_values(frame, "Close")
-            if len(closes) >= 2 and closes[-2] and entry.get("sector"):
+            if (len(closes) >= 2 and closes[-2] and entry.get("sector")
+                    and frame.index[-1].date().isoformat() == benchmark.get("last_bar")):
                 sector_moves.setdefault(entry["sector"], []).append(
                     (closes[-1] - closes[-2]) / closes[-2] * 100.0)
     sector_median = {
-        sector: sorted(values)[len(values) // 2]
+        sector: median(values)
         for sector, values in sector_moves.items() if len(values) >= 2
     }
 
@@ -469,7 +499,7 @@ def fetch_quotes(universe: dict, log=None) -> dict:
     for bucket in BUCKETS:
         rows = []
         for entry in universe.get(bucket, []):
-            frame = _frame_for(downloaded, entry["ticker"], single)
+            frame = downloaded.get(entry["ticker"])
             closes = _series_values(frame, "Close")
             volumes = _series_values(frame, "Volume")
 
@@ -480,20 +510,23 @@ def fetch_quotes(universe: dict, log=None) -> dict:
             # RVOL at screen time, so the shortlist can weigh participation
             rvol = None
             if len(volumes) >= 3:
-                prior = [v for v in volumes[:-1] if v > 0]
+                prior = [v for v in volumes[-21:-1] if v > 0]
                 if prior and volumes[-1] > 0:
+                    same_session = frame.index[-1].date() == market.now_ist().date()
                     rvol = (volumes[-1] / (sum(prior) / len(prior))
-                            / market.volume_divisor(session["session_fraction"]))
+                            / market.volume_divisor(session["session_fraction"] if same_session else 1.0))
 
             relative = None
-            if change is not None and benchmark.get("day_change_pct") is not None:
+            same_day = frame is not None and frame.index[-1].date().isoformat() == benchmark.get("last_bar")
+            if same_day and change is not None and benchmark.get("day_change_pct") is not None:
                 relative = change - benchmark["day_change_pct"]
 
-            peer_median = sector_median.get(entry.get("sector"))
+            peer_median = sector_median.get(entry.get("sector")) if same_day else None
             sector_rel = (change - peer_median
                           if change is not None and peer_median is not None else None)
 
             rows.append({
+                **entry,
                 "ticker": entry["ticker"],
                 "name": entry["name"],
                 "sector": entry.get("sector"),
@@ -511,10 +544,12 @@ def fetch_quotes(universe: dict, log=None) -> dict:
 
 def _benchmark_block(frame) -> dict:
     """Today's move and window return for the index, or nulls."""
-    closes = _series_values(frame, "Close")
+    closes = _series_values(frame, "Close")[-23:]
     out = {
         "name": BENCHMARK_NAME, "ticker": BENCHMARK,
         "last": None, "day_change_pct": None, "window_return_pct": None,
+        "last_bar": frame.index[-1].date().isoformat() if frame is not None and len(frame) else None,
+        "window_start": frame.index[-min(23, len(frame))].date().isoformat() if frame is not None and len(frame) else None,
     }
     if len(closes) >= 2:
         out["last"] = _round(closes[-1])
@@ -527,62 +562,81 @@ def _benchmark_block(frame) -> dict:
 
 def build_evidence_live(quote: dict, log=None) -> dict:
     """Turn one screened quote (with its OHLC frame) into a full evidence bundle."""
-    yf = _import_yf()
+    import company_data
     say = log or (lambda _m: None)
-
     ticker = quote["ticker"]
-    symbol = ticker.split(".")[0]
+    symbol = ticker.rsplit(".", 1)[0]
     ev = _empty_evidence(symbol, quote.get("name") or symbol, ticker,
                          quote.get("bucket"), quote.get("sector"))
-
-    frame = quote.get("frame")
+    profile = quote.get("company_data")
+    if profile is None:
+        profile = company_data.fetch_company_data(ticker, log=say)
+    info = profile.get("info") or {}
+    info_reco = profile.get("recommendations") or {}
+    ev["company_data"] = profile.get("metadata") or {}
+    ev["fundamentals"] = company_data.build_fundamentals(info, profile.get("metadata"))
+    ev["news"] = profile.get("news") or ev["news"]
+    ev["evidence_scope"] = quote.get("evidence_scope", "enriched")
+    ev["notes"] = ["Fundamental ratios are provider-reported; retrieval time is not a filing date. "
+                   "Missing metrics are unavailable. Analyst targets are opinions, not fair values."]
+    if info.get("longName") or info.get("shortName"):
+        ev["name"] = info.get("longName") or info.get("shortName")
+    if info.get("sector"):
+        ev["sector"] = info["sector"]
+    frame = _valid_frame(quote.get("frame"))
     closes = _series_values(frame, "Close")
     highs = _series_values(frame, "High")
     lows = _series_values(frame, "Low")
     opens = _series_values(frame, "Open")
     volumes = _series_values(frame, "Volume")
-
-    info = {}
-    try:
-        handle = yf.Ticker(ticker)
-        try:
-            info = handle.info or {}
-        except Exception as exc:                                  # noqa: BLE001
-            say(f"{symbol}: .info unavailable ({type(exc).__name__})")
-        info_reco = _recommendation_split(handle, symbol, say)
-    except Exception as exc:                                      # noqa: BLE001
-        say(f"{symbol}: yfinance handle failed ({type(exc).__name__})")
-        info_reco = {}
-
-    if info.get("longName") or info.get("shortName"):
-        ev["name"] = info.get("longName") or info.get("shortName")
-    if info.get("sector"):
-        ev["sector"] = info["sector"]
-
-    # ---- price -----------------------------------------------------------
-    live = _clean(info.get("currentPrice")) or _clean(info.get("regularMarketPrice"))
-    if live is None and closes:
-        live = closes[-1]
-    prev_close = _clean(info.get("regularMarketPreviousClose")) or _clean(info.get("previousClose"))
-    if prev_close is None and len(closes) >= 2:
-        prev_close = closes[-2]
-
+    daily_date = frame.index[-1].date() if frame is not None else None
+    daily_as_of = daily_date.isoformat() if daily_date else None
+    intra = _session_frame(quote.get("intraday_frame"))
+    today = market.now_ist().date()
+    bar_dates = [stamp.date().isoformat() for stamp in frame.index] if frame is not None else []
+    live = closes[-1] if closes else None
+    prev_close = closes[-2] if len(closes) >= 2 else None
+    price_as_of = daily_as_of
+    price_source = "yfinance daily bars"
+    if intra is not None:
+        live = float(intra["Close"].iloc[-1])
+        price_as_of = intra.index[-1].isoformat()
+        price_source = "yfinance 5m bars"
+        prev_close = closes[-2] if daily_date == today and len(closes) >= 2 else (closes[-1] if closes else None)
+        session_values = (float(intra["Open"].iloc[0]), float(intra["High"].max()),
+                          float(intra["Low"].min()), live, float(intra["Volume"].sum()))
+        for values, value in zip((opens, highs, lows, closes, volumes), session_values):
+            if daily_date == today and values:
+                values[-1] = value
+            else:
+                values.append(value)
+        if daily_date != today:
+            bar_dates.append(today.isoformat())
+    elif live is None:
+        candidates = (_clean(info.get(key)) for key in ("currentPrice", "regularMarketPrice"))
+        live = next((value for value in candidates if value is not None and value > 0), None)
+        prev_close = _clean(info.get("regularMarketPreviousClose"))
+        provider_time = _clean(info.get("regularMarketTime"))
+        if provider_time is not None:
+            try:
+                price_as_of = datetime.fromtimestamp(provider_time, IST).isoformat()
+            except (ValueError, OverflowError, OSError):
+                price_as_of = None
+        price_source = "yfinance profile (fallback)"
     ev["price"] = {
-        "live": _round(live),
-        "day_open": _round(_clean(info.get("regularMarketOpen")) or _clean(info.get("open"))
-                           or (opens[-1] if opens else None)),
-        "day_high": _round(_clean(info.get("dayHigh")) or (highs[-1] if highs else None)),
-        "day_low": _round(_clean(info.get("dayLow")) or (lows[-1] if lows else None)),
+        "live": _round(live), "as_of": price_as_of, "source": price_source,
+        "day_open": _round(opens[-1] if opens else None),
+        "day_high": _round(highs[-1] if highs else None),
+        "day_low": _round(lows[-1] if lows else None),
         "prev_close": _round(prev_close),
-        "day_change_pct": _round(((live - prev_close) / prev_close * 100.0)
-                                 if (live is not None and prev_close) else None),
-        "volume": int(_clean(info.get("volume")) or _clean(info.get("regularMarketVolume"))
-                      or (volumes[-1] if volumes else 0)) or None,
+        "day_change_pct": _round((live - prev_close) / prev_close * 100.0
+                                 if live is not None and prev_close else None),
+        "volume": int(volumes[-1]) if volumes else None,
     }
 
     # ---- 52-week range ---------------------------------------------------
-    hi52 = _clean(info.get("fiftyTwoWeekHigh"))
-    lo52 = _clean(info.get("fiftyTwoWeekLow"))
+    hi52 = max(highs[-252:]) if len(highs) >= 252 else _clean(info.get("fiftyTwoWeekHigh"))
+    lo52 = min(lows[-252:]) if len(lows) >= 252 else _clean(info.get("fiftyTwoWeekLow"))
     position = pct_from_high = None
     if live is not None and hi52 and lo52 is not None and hi52 > lo52:
         position = (live - lo52) / (hi52 - lo52) * 100.0
@@ -593,12 +647,23 @@ def build_evidence_live(quote: dict, log=None) -> dict:
     }
 
     # ---- market phase, technicals, intraday -------------------------------
-    phase_info = market.describe(market_state=info.get("marketState"))
+    phase_info = market.describe()  # cached profile marketState is not a fresh session signal
     ev["market"] = phase_info
-    ev["regime"] = market.regime(log=say)
-    ev["technicals"].update(_technicals(closes, highs, lows, volumes, live,
-                                        ev["price"], phase_info["session_fraction"]))
-    ev["intraday"] = build_intraday(quote.get("intraday_frame"),
+    ev["regime"] = quote.get("regime") or market.regime(log=say)
+    fraction = phase_info["session_fraction"] if daily_date == today or intra is not None else 1.0
+    ev["technicals"].update(_technicals(closes[-23:], highs[-23:], lows[-23:], volumes[-23:], live,
+                                        ev["price"], fraction))
+    ev["technicals"]["last_bar"] = bar_dates[-1] if bar_dates else None
+    ev["technicals"]["window_start"] = bar_dates[-min(23, len(bar_dates))] if bar_dates else None
+    ev["technicals"]["history_bars"] = len(closes)
+    ev["technicals"]["observations"] = len(closes)
+    ev["technicals"]["window_sessions"] = min(23, len(closes))
+    ev["technicals"]["price_vs_sma50_pct"] = _round((live / (sum(closes[-50:]) / 50) - 1) * 100) if len(closes) >= 50 and live else None
+    ev["technicals"]["price_vs_sma200_pct"] = _round((live / (sum(closes[-200:]) / 200) - 1) * 100) if len(closes) >= 200 and live else None
+    turnover = [c * v for c, v in zip(closes[-21:-1], volumes[-21:-1])]
+    ev["liquidity"] = {"average_daily_turnover_inr": _round(sum(turnover) / len(turnover)) if turnover else None,
+                       "sample_sessions": len(turnover), "excluded_from_analysis": False}
+    ev["intraday"] = build_intraday(intra,
                                     ev["price"]["prev_close"], live, phase_info)
 
     # ---- analyst ---------------------------------------------------------
@@ -620,11 +685,13 @@ def build_evidence_live(quote: dict, log=None) -> dict:
     benchmark = quote.get("benchmark") or {}
     day_change = ev["price"]["day_change_pct"]
     window = ev["technicals"]["window_return_pct"]
+    same_day = benchmark.get("last_bar") == ev["technicals"].get("last_bar") and benchmark.get("last_bar") is not None
+    same_window = same_day and benchmark.get("window_start") == ev["technicals"].get("window_start") and benchmark.get("window_start") is not None
     rel_day = (day_change - benchmark["day_change_pct"]
-               if day_change is not None and benchmark.get("day_change_pct") is not None
+               if same_day and day_change is not None and benchmark.get("day_change_pct") is not None
                else None)
     rel_window = (window - benchmark["window_return_pct"]
-                  if window is not None and benchmark.get("window_return_pct") is not None
+                  if same_window and window is not None and benchmark.get("window_return_pct") is not None
                   else None)
     ev["relative"] = {
         "benchmark": benchmark.get("name") or BENCHMARK_NAME,
@@ -633,6 +700,7 @@ def build_evidence_live(quote: dict, log=None) -> dict:
         "rel_day_change_pct": _round(rel_day),
         "rel_window_return_pct": _round(rel_window),
         "outperforming": None if rel_day is None else bool(rel_day > 0),
+        "comparison_aligned": same_window,
         "sector": quote.get("sector"),
         "sector_median_pct": quote.get("sector_median_pct"),
         "sector_rel_pct": quote.get("sector_rel_pct"),
@@ -670,7 +738,7 @@ def _technicals(closes, highs, lows, volumes, live, price_block,
     # dead. We divide the benchmark by the fraction of the session elapsed and
     # keep the unscaled figure alongside it so nothing is hidden.
     if len(volumes) >= 3:
-        prior = [v for v in volumes[:-1] if v > 0]
+        prior = [v for v in volumes[-21:-1] if v > 0]
         if prior and volumes[-1] > 0:
             average = sum(prior) / len(prior)
             raw = volumes[-1] / average
@@ -706,7 +774,7 @@ def _technicals(closes, highs, lows, volumes, live, price_block,
     sma = None
     if closes:
         window = closes[-SMA_PERIOD:] if len(closes) >= SMA_PERIOD else closes
-        if len(window) >= 5:
+        if len(window) >= SMA_PERIOD:
             sma = sum(window) / len(window)
             if ref is not None and sma:
                 out["price_vs_sma_pct"] = _round((ref - sma) / sma * 100.0)
@@ -755,7 +823,8 @@ def build_intraday(frame, prev_close, live, phase_info) -> dict:
         return _empty_intraday(
             f"no live session — {phase_info.get('label', 'market closed')}")
 
-    if frame is None or getattr(frame, "empty", True):
+    frame = _session_frame(frame)
+    if frame is None:
         return _empty_intraday("feed returned no intraday bars for today")
 
     opens = _series_values(frame, "Open")
@@ -780,10 +849,18 @@ def build_intraday(frame, prev_close, live, phase_info) -> dict:
 
     # Opening range: the first 15 minutes. Breaking it is the classic
     # intraday continuation trigger, holding below it the classic failure.
-    take = min(OPENING_RANGE_BARS, len(highs), len(lows))
-    if take:
-        or_high = max(highs[:take])
-        or_low = min(lows[:take])
+    session_start = market.now_ist().replace(hour=9, minute=15, second=0, microsecond=0)
+    expected_open = [session_start + timedelta(minutes=5 * i) for i in range(OPENING_RANGE_BARS)]
+    out["opening_range_complete"] = (all(stamp in frame.index for stamp in expected_open)
+                                     and market.now_ist() >= session_start + timedelta(minutes=15))
+    expected_count = int((frame.index[-1] - session_start).total_seconds() // 300) + 1
+    out["coverage_complete"] = frame.index[0] == session_start and len(frame) == expected_count
+    if not out["coverage_complete"]:
+        out["reason"] = "session bars have gaps; VWAP uses only the available bars"
+    if out["opening_range_complete"]:
+        opening = frame.loc[expected_open]
+        or_high = float(opening["High"].max())
+        or_low = float(opening["Low"].min())
         out["opening_range_high"] = _round(or_high)
         out["opening_range_low"] = _round(or_low)
         if or_low:
@@ -803,7 +880,7 @@ def build_intraday(frame, prev_close, live, phase_info) -> dict:
             if ref is not None and vwap:
                 out["price_vs_vwap_pct"] = _round((ref - vwap) / vwap * 100.0)
 
-    out["session_volume"] = int(sum(volumes)) or None
+    out["session_volume"] = int(sum(volumes))
     out["session_high"] = _round(max(highs)) if highs else None
     out["session_low"] = _round(min(lows)) if lows else None
 
@@ -819,32 +896,8 @@ SWING_HISTORY_PERIOD = "2y"   # 52-week high and 12-1 momentum need a year+
 
 
 def fetch_swing_history(tickers, log=None):
-    """
-    Two years of daily bars for the shortlist.
-
-    The screener downloads one month, which is all it needs and all it should
-    pay for across the whole universe. The swing rules need a year before they
-    can compute a 52-week high at all, so without this they never fire in
-    production no matter how well they backtest — the rules and the data
-    simply never meet.
-    """
-    yf = _import_yf()
-    say = log or (lambda _m: None)
-    if not tickers:
-        return {}
-    say(f"downloading {SWING_HISTORY_PERIOD} daily OHLC for {len(tickers)} "
-        f"shortlisted (swing rules need a year of history)")
-    try:
-        downloaded = yf.download(
-            tickers=" ".join(tickers), period=SWING_HISTORY_PERIOD, interval="1d",
-            group_by="ticker", auto_adjust=False, actions=False,
-            progress=False, threads=True)
-    except Exception as exc:                                       # noqa: BLE001
-        say(f"swing history download failed ({type(exc).__name__}) — "
-            f"positional rules will stay silent this run")
-        return {}
-    single = len(tickers) == 1
-    return {t: _frame_for(downloaded, t, single) for t in tickers}
+    """Bounded two-year daily history downloads."""
+    return download_frames(tickers, period=SWING_HISTORY_PERIOD, log=log)
 
 
 def fired_strategies(quote) -> dict:
@@ -860,7 +913,7 @@ def fired_strategies(quote) -> dict:
 
     out = {"intraday": {}, "swing": {}}
 
-    frame = quote.get("intraday_frame")
+    frame = _session_frame(quote.get("intraday_frame"))
     if frame is not None and not getattr(frame, "empty", True):
         bars = [{"open": o, "high": h, "low": l, "close": c, "volume": v}
                 for o, h, l, c, v in zip(_series_values(frame, "Open"),
@@ -868,11 +921,12 @@ def fired_strategies(quote) -> dict:
                                          _series_values(frame, "Low"),
                                          _series_values(frame, "Close"),
                                          _series_values(frame, "Volume"))]
-        daily = quote.get("frame")
+        daily = _valid_frame(quote.get("frame"))
         prev_close = None
         if daily is not None and not getattr(daily, "empty", True):
             closes = _series_values(daily, "Close")
-            prev_close = closes[-2] if len(closes) >= 2 else None
+            prev_close = (closes[-2] if daily.index[-1].date() == market.now_ist().date() and len(closes) >= 2
+                          else closes[-1] if closes and daily.index[-1].date() != market.now_ist().date() else None)
         s = strategies.session(bars, prev_close=prev_close, rvol=quote.get("rvol"))
         if s:
             for name, fn in strategies.STRATEGIES.items():
@@ -902,31 +956,73 @@ def fired_strategies(quote) -> dict:
 
 
 def fetch_intraday(tickers, log=None):
-    """One batched 5-minute download for the shortlist. {ticker: frame}."""
-    yf = _import_yf()
+    """Bounded downloads of current-session bars, with per-symbol failure isolation."""
+    return download_frames(tickers, period="1d", interval=INTRADAY_INTERVAL, log=log)
+
+
+def refresh_evidence(bundles, log=None):
+    """Refresh narrative candidates after an all-stock scan, preserving order.
+
+    Every returned bundle is rebuilt from these downloads and cached company
+    evidence. Failed market downloads never reuse the previous candidate price.
+    """
+    import company_data
     say = log or (lambda _m: None)
-    if not tickers:
-        return {}
-
-    say(f"downloading {INTRADAY_INTERVAL} session bars for {len(tickers)} shortlisted")
+    bundles = list(bundles)
+    if not bundles:
+        return []
+    tickers = list(dict.fromkeys(bundle.get("ticker") or f"{bundle.get('symbol')}.NS"
+                                for bundle in bundles))
+    say(f"refreshing market evidence for {len(tickers)} narrative candidates")
     try:
-        downloaded = yf.download(
-            tickers=" ".join(tickers),
-            period="1d",
-            interval=INTRADAY_INTERVAL,
-            group_by="ticker",
-            auto_adjust=False,
-            actions=False,
-            progress=False,
-            threads=True,
-        )
-    except Exception as exc:                                      # noqa: BLE001
-        say(f"intraday download failed ({type(exc).__name__}) — "
-            f"intraday track will report unavailable")
-        return {}
-
-    single = len(tickers) == 1
-    return {t: _frame_for(downloaded, t, single) for t in tickers}
+        daily = download_frames(tickers + [BENCHMARK], log=say)
+    except Exception as exc:
+        say(f"candidate daily refresh failed ({type(exc).__name__})")
+        daily = {}
+    try:
+        intraday = fetch_intraday(tickers, log=say) if market.describe().get("live_session") else {}
+    except Exception as exc:
+        say(f"candidate session refresh failed ({type(exc).__name__})")
+        intraday = {}
+    benchmark = _benchmark_block(daily.get(BENCHMARK))
+    try:
+        regime = market.regime(log=say)
+    except Exception:
+        regime = {"state": "unknown", "reason": "regime refresh unavailable"}
+    output = []
+    for previous in bundles:
+        ticker = previous.get("ticker") or f"{previous.get('symbol')}.NS"
+        frame = daily.get(ticker)
+        session = _session_frame(intraday.get(ticker))
+        try:
+            profile = company_data.fetch_company_data(ticker, log=say)
+            quote = {"ticker": ticker, "name": previous.get("name"),
+                     "bucket": previous.get("cap_segment"), "sector": previous.get("sector"),
+                     "frame": frame, "history_frame": frame, "intraday_frame": session,
+                     "benchmark": benchmark, "regime": regime, "company_data": profile,
+                     "evidence_scope": "enriched"}
+            bundle = build_evidence_live(quote, log=say)
+            if frame is None and session is None:
+                # Cached profile prices remain useful provenance, but a failed
+                # explicit market refresh cannot certify them as current.
+                bundle["price"].update(live=None, as_of=None, source="refresh unavailable")
+                bundle["data_gaps"].extend(["price.live", "price.as_of"])
+                bundle["notes"].append("market refresh returned no bars; previous price was not reused")
+                bundle["refresh_status"] = "unavailable"
+            else:
+                quote["rvol"] = bundle["technicals"].get("rvol")
+                bundle["strategies"] = fired_strategies(quote)
+                bundle["refresh_status"] = "updated"
+        except Exception as exc:
+            bundle = _empty_evidence(previous.get("symbol") or ticker.rsplit(".", 1)[0],
+                                     previous.get("name"), ticker,
+                                     previous.get("cap_segment"), previous.get("sector"))
+            bundle["refresh_status"] = "unavailable"
+            bundle["notes"].append(f"candidate refresh failed ({type(exc).__name__}); previous evidence was not reused")
+            bundle = _finalise_gaps(bundle)
+            say(f"{ticker}: candidate refresh unavailable ({type(exc).__name__})")
+        output.append(bundle)
+    return output
 
 
 def _recommendation_split(handle, symbol, say) -> dict:
@@ -1009,56 +1105,8 @@ def scan_demo(shortlist_per_bucket: int, log=None):
     return bundles, shortlist
 
 
-def scan_live(universe: dict, shortlist_per_bucket: int, log=None):
-    """Return (universe_count, shortlisted_evidence_bundles) for live mode."""
-    say = log or (lambda _m: None)
-    quotes, benchmark = fetch_quotes(universe, log=say)
-    globals()["LAST_QUOTES"] = quotes
-
-    screened = []
-    for bucket in BUCKETS:
-        picked = screen_bucket(quotes.get(bucket, []), shortlist_per_bucket)
-        if picked:
-            say(f"{bucket}-cap shortlist: " + ", ".join(
-                f"{q['ticker'].split('.')[0]} "
-                f"{q['day_change_pct']:+.2f}%"
-                + (f" (rel {q['rel_day_change_pct']:+.2f}%)"
-                   if q.get("rel_day_change_pct") is not None else "")
-                + (f" rvol {q['rvol']:.1f}x" if q.get("rvol") is not None else "")
-                if q["day_change_pct"] is not None else q["ticker"].split(".")[0]
-                for q in picked))
-        screened.extend(picked)
-
-    for quote in screened:
-        quote["benchmark"] = benchmark
-
-    # Intraday bars cost one more request, so we only pay for it on survivors.
-    frames = fetch_intraday([q["ticker"] for q in screened], log=say)
-    for quote in screened:
-        quote["intraday_frame"] = frames.get(quote["ticker"])
-
-    history = fetch_swing_history([q["ticker"] for q in screened], log=say)
-    for quote in screened:
-        quote["history_frame"] = history.get(quote["ticker"])
-
-    bundles = []
-    for quote in screened:
-        try:
-            bundle = build_evidence_live(quote, log=say)
-        except Exception as exc:                                  # noqa: BLE001
-            say(f"{quote['ticker']}: evidence build failed ({type(exc).__name__}) — skipped")
-            continue
-
-        # A ticker Yahoo no longer resolves (renamed, delisted, demerged) comes
-        # back fully null. There is nothing to debate, so drop it rather than
-        # spend an LLM call arguing about a stock with no price.
-        if (bundle.get("price") or {}).get("live") is None:
-            say(f"{quote['ticker']}: no price data returned — delisted or renamed? skipped")
-            continue
-
-        # Which named rules fire on this stock right now. The debate weighs
-        # them by their measured record; here we only record what triggered.
-        bundle["strategies"] = fired_strategies(quote)
-        bundles.append(bundle)
-
-    return universe_size(universe), bundles
+def scan_live(universe: dict, shortlist_per_bucket: int, log=None, progress=None):
+    """Study every stock; return a separate shortlist for the narrative debate."""
+    import intelligence
+    return intelligence.analyze_universe(universe, shortlist_per_bucket, log=log,
+                                         progress=progress, universe_metadata=LAST_UNIVERSE_METADATA)

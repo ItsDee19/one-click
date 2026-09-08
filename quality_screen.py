@@ -35,19 +35,18 @@ reports the window it actually used and never relabels it.
 
 WHY IT IS STAGED
 ----------------
-2,570 NSE equities times four API calls each is tens of thousands of requests.
-The funnel spends cheap calls on everything and expensive ones only on
+Thousands of NSE equities times several API calls each is substantial work.
+The quality-screen funnel spends cheap calls on everything and expensive ones only on
 survivors: price and liquidity first, the summary block next, and full
 statements only for the handful still standing.
 """
 
 from __future__ import annotations
 
-import csv
-import io
+import hashlib
 import json
+import math
 import os
-import time
 from datetime import datetime, timedelta, timezone
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -56,11 +55,8 @@ CACHE_FILE = os.path.join(HERE, "quality_screen.json")
 PROGRESS_FILE = os.path.join(HERE, ".quality_screen_progress.json")
 CACHE_HOURS = 20                      # statements change quarterly, not hourly
 
-NSE_LIST_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
-HEADERS = {
-    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                   "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
-}
+SCREEN_VERSION = 2
+LIQUIDITY_MIN_TURNOVER_CR = 0.5
 
 CRORE = 1e7
 
@@ -112,58 +108,13 @@ def _row(frame, name, col=0):
 # the universe
 # ---------------------------------------------------------------------------
 
-def fetch_nse_list(log=None):
-    """
-    Every equity listed on the NSE, from the exchange's own CSV.
-
-    BSE publishes an equivalent list but its download endpoint currently
-    answers 404, and BSE-only names are overwhelmingly illiquid, so this is
-    NSE for now and says so rather than implying wider coverage.
-    """
-    import requests
-    say = log or (lambda _m: None)
-
-    # NSE hands out cookies on its HTML pages and throttles bare hits on the
-    # archive host. Priming a session and retrying is the same treatment the
-    # offer-document reader needs, and for the same reason.
-    session = requests.Session()
-    session.headers.update(HEADERS)
-    try:
-        session.get("https://www.nseindia.com/market-data/securities-available-for-trading",
-                    timeout=20)
-    except Exception:                                              # noqa: BLE001
-        pass
-
-    response = None
-    for attempt in range(3):
-        try:
-            response = session.get(NSE_LIST_URL, timeout=45)
-            response.raise_for_status()
-            break
-        except Exception as exc:                                   # noqa: BLE001
-            if attempt == 2:
-                say(f"NSE equity list unavailable after 3 tries ({type(exc).__name__})")
-                return []
-            say(f"NSE equity list attempt {attempt + 1} failed "
-                f"({type(exc).__name__}) — retrying")
-            time.sleep(3 * (attempt + 1))
-    if response is None:
-        return []
-
-    rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8", "replace"))))
-    out = []
-    for row in rows:
-        symbol = (row.get("SYMBOL") or "").strip()
-        series = (row.get(" SERIES") or row.get("SERIES") or "").strip()
-        if not symbol or series != "EQ":          # EQ only: no SME, no debt series
-            continue
-        out.append({
-            "symbol": symbol,
-            "ticker": f"{symbol}.NS",
-            "name": (row.get("NAME OF COMPANY") or "").strip(),
-        })
-    say(f"NSE equity list: {len(out)} EQ-series companies")
-    return out
+def fetch_nse_list(log=None, *, include_metadata=False):
+    """Share main-board/SME discovery and its honest cache/fallback coverage."""
+    import stock_universe
+    universe, metadata = stock_universe.load_exchange_universe(log=log)
+    rows = sorted((dict(entry) for entries in universe.values() for entry in entries),
+                  key=lambda entry: entry["ticker"])
+    return (rows, metadata) if include_metadata else rows
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +193,7 @@ def piotroski_f(bs, fin, cf):
     cl0, cl1 = _row(bs, "Current Liabilities", 0), _row(bs, "Current Liabilities", 1)
     gp0, gp1 = _row(fin, "Gross Profit", 0), _row(fin, "Gross Profit", 1)
     rev0, rev1 = _row(fin, "Total Revenue", 0), _row(fin, "Total Revenue", 1)
-    eq0, eq1 = _row(bs, "Stockholders Equity", 0), _row(bs, "Stockholders Equity", 1)
+    common_issuance = _row(cf, "Common Stock Issuance", 0)
 
     roa0 = (ni0 / ta0) if ni0 is not None and ta0 else None
     roa1 = (ni1 / ta1) if ni1 is not None and ta1 else None
@@ -258,8 +209,16 @@ def piotroski_f(bs, fin, cf):
     check("current ratio improving",
           None if None in (ca0, cl0, ca1, cl1) or not cl0 or not cl1
           else (ca0 / cl0) > (ca1 / cl1))
-    check("no equity dilution",
-          None if eq0 is None or eq1 is None else eq0 >= eq1)
+    # Piotroski (2000), section 2.3.2: no common-equity issuance during the
+    # preceding fiscal year. Gross issuance is direct evidence; book equity
+    # and net share-count changes can hide issuance behind profits/buybacks.
+    # https://www.gsb.stanford.edu/faculty-research/publications/value-investing-use-historical-financial-statement-information
+    check("no common-equity issuance",
+          None if common_issuance is None or not math.isfinite(common_issuance) or common_issuance < 0
+          else common_issuance == 0)
+    tests[-1]["basis"] = ("Provider-reported gross Common Stock Issuance in the latest annual cash-flow statement; "
+                          "book-equity growth and net share counts are not issuance evidence. "
+                          "This cash-flow measure does not verify noncash share issuance.")
     check("gross margin improving",
           None if None in (gp0, rev0, gp1, rev1) or not rev0 or not rev1
           else (gp0 / rev0) > (gp1 / rev1))
@@ -272,26 +231,44 @@ def piotroski_f(bs, fin, cf):
 
 def cagr(frame, name):
     """
-    Compound growth across every year this feed carries, with the span named.
+    Compound growth between valid dated endpoints, with actual elapsed years.
 
-    The screen asked for ten years; five is what is on file, so the window is
-    returned alongside the number and the caller labels it honestly.
+    Missing intermediate years do not shorten the denominator. If an endpoint
+    is missing, use the remaining dated endpoints and report that shorter
+    actual span. Undated or duplicate periods cannot support an annual rate.
     """
     if frame is None or getattr(frame, "empty", True) or name not in frame.index:
         return None, None
     try:
-        series = [_f(v) for v in frame.loc[name].tolist()]
+        series = frame.loc[name]
+        pairs, dates = [], set()
+        for period, raw in zip(series.index, series.tolist()):
+            # Refuse numeric/TTM labels instead of treating their positions as years.
+            period_end = datetime.fromisoformat(str(period)).date()
+            if period_end in dates:
+                return None, None
+            dates.add(period_end)
+            value = None if isinstance(raw, bool) else _f(raw)
+            if value is not None and math.isfinite(value):
+                pairs.append((period_end, value))
     except Exception:                                              # noqa: BLE001
         return None, None
-    series = [v for v in series if v is not None]
-    if len(series) < 2:
+    if len(pairs) < 2:
         return None, None
-
-    latest, earliest = series[0], series[-1]        # yfinance is newest-first
-    years = len(series) - 1
-    if earliest is None or earliest <= 0 or latest <= 0:
-        return None, years
-    return round(((latest / earliest) ** (1.0 / years) - 1.0) * 100.0, 1), years
+    pairs.sort(key=lambda pair: pair[0])
+    (first_date, earliest), (last_date, latest) = pairs[0], pairs[-1]
+    years = (last_date - first_date).days / 365.2425
+    if years <= 0:
+        return None, None
+    reported_years = round(years, 3)
+    if earliest <= 0 or latest <= 0:
+        return None, reported_years
+    try:
+        # Log form avoids overflowing the ratio before annualization.
+        growth = math.expm1((math.log(latest) - math.log(earliest)) / years) * 100.0
+    except (OverflowError, ValueError):
+        return None, reported_years
+    return (round(growth, 1) if math.isfinite(growth) else None), reported_years
 
 
 # ---------------------------------------------------------------------------
@@ -348,8 +325,10 @@ def evaluate(ticker, name, symbol, criteria, log=None):
                             f"only {f['max']} of 9 tests could be computed"),
         "market_cap_cr": _check(market_cap_cr, criteria["market_cap_cr_min"], "gt"),
         "operating_margin": _check(margin_pct, criteria["operating_margin_min"], "gt"),
-        "sales_growth": _check(sales_growth, criteria["sales_growth_min"], "gt"),
-        "profit_growth": _check(profit_growth, criteria["profit_growth_min"], "gt"),
+        "sales_growth": _check(sales_growth, criteria["sales_growth_min"], "gt",
+                               f"{sales_years:g} elapsed years between dated annual observations" if sales_years is not None else None),
+        "profit_growth": _check(profit_growth, criteria["profit_growth_min"], "gt",
+                                f"{profit_years:g} elapsed years between dated annual observations" if profit_years is not None else None),
         "debt_to_equity": _check(d2e, criteria["debt_to_equity_max"], "lt"),
         "promoter_holding": _check(promoter_pct, criteria["promoter_holding_min"], "gt"),
     }
@@ -365,7 +344,8 @@ def evaluate(ticker, name, symbol, criteria, log=None):
         "passed": len(passes), "evaluated": len(evaluated), "criteria": len(checks),
         "checks": checks,
         "piotroski_detail": f,
-        "growth_window_years": sales_years or profit_years,
+        "growth_window_years": sales_years if sales_years == profit_years else None,
+        "growth_windows_years": {"sales": sales_years, "profit": profit_years},
         "price": _f(info.get("currentPrice")) or _f(info.get("regularMarketPrice")),
     }
 
@@ -385,26 +365,32 @@ def run(criteria=None, limit=None, log=None, force=False):
 
     Stage one costs a few batched downloads for the whole list and drops
     anything too illiquid to act on. Only survivors are worth a per-company
-    request, which is what makes 2,500 companies tractable at all.
+    request. Listing discovery itself retains every main-board and SME entry.
     """
     say = log or (lambda _m: None)
     criteria = {**DEFAULTS, **(criteria or {})}
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0):
+        raise ValueError("limit must be a positive integer")
 
     if force:
         _clear_progress()
     if not force:
         cached = read_cache(criteria)
-        if cached:
+        if cached and cached.get("screen_version") == SCREEN_VERSION and cached.get("requested_limit") == limit:
             say("quality screen: serving cached result")
             return cached
 
-    listed = fetch_nse_list(log=say)
+    listed, universe_metadata = fetch_nse_list(log=say, include_metadata=True)
+    discovered = len(listed)
     if not listed:
         return {"generated": _now().strftime("%d %b %Y, %H:%M IST"),
                 "error": "the NSE equity list could not be fetched",
-                "matches": [], "criteria": criteria}
+                "matches": [], "criteria": criteria, "universe": universe_metadata,
+                "discovered": 0, "listed": 0, "screen_version": SCREEN_VERSION,
+                "requested_limit": limit}
     if limit:
         listed = listed[:limit]
+    _prepare_progress(criteria, listed, say)
 
     # The liquidity scan is a dozen batched downloads over the whole exchange.
     # Recomputing it on every resume would make an interrupted run more
@@ -448,11 +434,23 @@ def run(criteria=None, limit=None, log=None, force=False):
     blob = {
         "generated": _now().strftime("%d %b %Y, %H:%M IST"),
         "criteria": criteria,
+        "screen_version": SCREEN_VERSION,
+        "requested_limit": limit,
+        "universe": universe_metadata,
+        "discovered": discovered,
         "listed": len(listed),
+        "liquidity_survivors": len(survivors),
+        "not_advanced_to_fundamentals": len(listed) - len(survivors),
+        "screen_filters": {
+            "minimum_average_daily_turnover_cr": LIQUIDITY_MIN_TURNOVER_CR,
+            "turnover_basis": "latest available close times mean volume over one month",
+            "limited": len(listed) < discovered,
+            "not_advanced_note": "Includes below-threshold liquidity and unavailable price data; these counts are not interchangeable.",
+        },
         "examined": examined,
         "errors": errors,
         "matches": matches,
-        "source": "NSE equity list + filed statements via Yahoo Finance",
+        "source": f"{universe_metadata.get('source', 'NSE trading lists')} + company statements via Yahoo Finance",
         "caveats": [
             "Sales and profit growth are compounded over the years this feed "
             "carries - typically five, not the ten the screen asks for. The "
@@ -463,13 +461,30 @@ def run(criteria=None, limit=None, log=None, force=False):
             "Altman Z is not computed for banks, NBFCs or insurers: the model "
             "assumes an operating balance sheet, so those are left unscored "
             "rather than given a number that looks comparable and is not.",
-            "BSE-only listings are not covered - the exchange list endpoint "
-            "currently answers 404.",
+            "The quality screen applies a separate turnover filter; the intelligence engine's all-stock analysis does not apply this filter.",
+            *universe_metadata.get("exclusions", []),
         ],
     }
+    if universe_metadata.get("degraded"):
+        blob["caveats"].append("Listing coverage is degraded; inspect universe source, timestamps and errors before interpreting an empty screen.")
+    if len(listed) < discovered:
+        blob["caveats"].append(f"This run explicitly screened only {len(listed)} of {discovered} discovered securities (--limit).")
     write_cache(blob)
     _clear_progress()
     return blob
+
+
+def _prepare_progress(criteria, listed, say):
+    """Old EQ-only or limited survivor lists must not become an all-stock run."""
+    identity = {"screen_version": SCREEN_VERSION,
+                "tickers": sorted(entry["ticker"] for entry in listed)}
+    fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    previous = _read_progress() or {}
+    if previous.get("criteria") != criteria or previous.get("universe_fingerprint") != fingerprint:
+        if previous:
+            say("quality-screen progress belongs to a different listing scope; starting fresh")
+        _clear_progress()
+        _write_progress({"criteria": criteria, "universe_fingerprint": fingerprint})
 
 
 def _load_progress(criteria, say):
@@ -495,7 +510,8 @@ def _save_progress(criteria, done, matches, errors):
 def _read_progress():
     try:
         with open(PROGRESS_FILE, "r", encoding="utf-8") as fh:
-            return json.load(fh)
+            blob = json.load(fh)
+        return blob if isinstance(blob, dict) else None
     except (OSError, ValueError):
         return None
 
@@ -557,7 +573,7 @@ def _liquidity_stage(listed, say):
             turnover_cr = (closes[-1] * (sum(volumes) / len(volumes))) / CRORE
             # a name trading a few lakh a day cannot be acted on even if its
             # statements are immaculate, so it is not worth four API calls
-            if turnover_cr >= 0.5:
+            if turnover_cr >= LIQUIDITY_MIN_TURNOVER_CR:
                 kept.append(entry)
         say(f"  liquidity stage: {min(start + chunk, len(tickers))}/{len(tickers)} "
             f"screened, {len(kept)} kept")
@@ -572,13 +588,22 @@ def read_cache(criteria=None, max_age_hours=CACHE_HOURS):
     try:
         with open(CACHE_FILE, "r", encoding="utf-8") as fh:
             blob = json.load(fh)
+        if not isinstance(blob, dict):
+            return None
         fetched = datetime.fromisoformat(blob["fetched_at"])
-    except (OSError, ValueError, KeyError):
+        if fetched.tzinfo is None:
+            return None
+    except (OSError, ValueError, KeyError, TypeError):
         return None
-    if (_now() - fetched).total_seconds() > max_age_hours * 3600:
+    age = (_now() - fetched).total_seconds()
+    if age < -300 or age > max_age_hours * 3600:
         return None
     if criteria and blob.get("criteria") != criteria:
         return None                     # a different screen is a different answer
+    if blob.get("screen_version") != SCREEN_VERSION:
+        blob["universe"] = {"source": "legacy_quality_cache", "degraded": True,
+                            "scope": "Legacy EQ-only NSE quality screen; SME and non-EQ series were excluded",
+                            "errors": ["Rerun the quality screen for unified main-board and SME discovery."]}
     return blob
 
 

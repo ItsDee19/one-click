@@ -27,6 +27,8 @@ it will work.
 from __future__ import annotations
 
 import strategy_edge
+import math
+import evidence_quality
 
 ENGINE_NAME = "deterministic"
 
@@ -78,6 +80,8 @@ def _get(evidence, *path):
         if not isinstance(node, dict):
             return None
         node = node.get(key)
+    if isinstance(node, float) and not math.isfinite(node):
+        return None
     return node
 
 
@@ -426,7 +430,25 @@ def _fundamentals_seat(ev) -> _Tally:
         t.reasons.append(f"{_fmt(buy_pct, '%')} buy ratings")
     if consensus:
         t.reasons.append(f"consensus '{consensus}'" + (f" from {_fmt(num, '', 0)} analysts" if num else ""))
-    t.note("no raw valuation ratios in this feed — target-based view only")
+    financials = ev.get("fundamentals") or {}
+    metrics = (("trailing_pe", "trailing P/E", "x"),
+               ("price_to_book", "price/book", "x"),
+               ("roe_pct", "return on equity", "%"),
+               ("profit_margin_pct", "profit margin", "%"),
+               ("revenue_growth_pct", "reported revenue growth", "%"),
+               ("earnings_growth_pct", "reported earnings growth", "%"),
+               ("debt_to_equity_ratio", "debt/equity", "x"))
+    available = [(label, evidence_quality.finite_number(financials.get(key)), unit)
+                 for key, label, unit in metrics]
+    available = [(label, value, unit) for label, value, unit in available if value is not None]
+    for label, value, unit in available:
+        t.note(f"{label} {_fmt(value, unit)} (provider-reported)")
+    if available:
+        if financials.get("stale") is True:
+            t.note("financial statements are stale; refresh before relying on this valuation view")
+        t.note("accounting ratios are descriptive; no sector-blind valuation or debt thresholds applied")
+    else:
+        t.note("raw accounting ratios unavailable — target-based view only")
     return t
 
 
@@ -434,13 +456,19 @@ def _news_seat(ev) -> _Tally:
     t = _Tally(50.0)
     total = _get(ev, "news", "total")
     net_tone = _get(ev, "news", "net_tone")
-    if not total:
-        t.note("no headlines in the pulled window — data unavailable")
+    if total is None:
+        t.note("headline feed data unavailable")
         return t
-    t.points += _clamp((net_tone or 0) * 8.0, -30.0, 30.0)
+    if total <= 0:
+        t.note("no headlines in the pulled window; no sentiment conclusion can be drawn")
+        return t
+    if net_tone is None:
+        t.note(f"{_fmt(total, '', 0)} headlines retrieved; sentiment data unavailable")
+        return t
+    t.points += _clamp(net_tone * 8.0, -30.0, 30.0)
     t.reasons.append(
-        f"{int(total)} headlines: {int(_get(ev, 'news', 'positive') or 0)} positive, "
-        f"{int(_get(ev, 'news', 'negative') or 0)} negative, net {int(net_tone or 0)}"
+        f"{int(total)} headlines: {_fmt(_get(ev, 'news', 'positive'), '', 0)} positive, "
+        f"{_fmt(_get(ev, 'news', 'negative'), '', 0)} negative, net {int(net_tone)}"
     )
     top = (_get(ev, "news", "recent") or [])[:1]
     if top:
@@ -483,7 +511,10 @@ def holding_window(ev) -> dict:
         }
 
     drift = atr_pct * DRIFT_SHARE_OF_ATR
-    base_days = upside / drift
+    if drift <= 0:
+        return {"days_min": None, "days_max": None, "label": "data unavailable",
+                "basis": "daily range is too small to derive a holding window"}
+    base_days = min(MAX_HOLD_DAYS / HORIZON_BAND_LOW, upside / drift)
     days_min = int(_clamp(round(base_days * HORIZON_BAND_LOW), MIN_HOLD_DAYS, MAX_HOLD_DAYS))
     days_max = int(_clamp(round(base_days * HORIZON_BAND_HIGH), MIN_HOLD_DAYS, MAX_HOLD_DAYS))
     if days_max <= days_min:
@@ -511,19 +542,20 @@ def risk_reward(price, levels) -> dict:
     a stop.
     """
     out = {"risk_pct": None, "reward_pct": None, "ratio": None}
-    if price is None or not levels:
+    price = evidence_quality.finite_number(price)
+    if price is None or price <= 0 or not isinstance(levels, dict):
         return out
 
-    objective = levels.get("objective")
-    invalidation = levels.get("invalidation")
-    if objective is None or invalidation is None or not price:
+    objective = evidence_quality.finite_number(levels.get("objective"))
+    invalidation = evidence_quality.finite_number(levels.get("invalidation"))
+    if objective is None or invalidation is None or invalidation <= 0:
         return out
     if invalidation >= price or objective <= price:
         return out          # stop above price or target below it: not a long
 
     risk = (price - invalidation) / price * 100.0
     reward = (objective - price) / price * 100.0
-    if risk <= 0:
+    if risk <= 0 or not all(math.isfinite(value) for value in (risk, reward, reward / risk)):
         return out
 
     out["risk_pct"] = round(risk, 2)
@@ -571,19 +603,39 @@ def _apply_rr_gate(verdict_block, ev, minimum):
     rr = risk_reward(_get(ev, "price", "live"), verdict_block.get("levels"))
     verdict_block["risk_reward"] = rr
 
-    if rr["ratio"] is None or rr["ratio"] >= minimum:
+    if rr["ratio"] is not None and rr["ratio"] >= minimum:
         return verdict_block
 
     verdict_block["verdict"] = "WATCH"
     verdict_block["confidence"] = min(6, verdict_block.get("confidence") or 6)
     verdict_block["gated"] = True
-    verdict_block["rationale"] = (
-        f"Held to WATCH on risk/reward: {rr['reward_pct']}% to the objective "
+    explanation = ("objective or invalidation is missing, invalid, or not on the correct side of price"
+                   if rr["ratio"] is None else
+                   f"{rr['reward_pct']}% to the objective "
         f"against {rr['risk_pct']}% to the invalidation is {rr['ratio']}:1, "
-        f"under the {minimum}:1 the desk requires. "
+        f"under the {minimum}:1 the desk requires")
+    verdict_block["rationale"] = (
+        f"Held to WATCH on risk/reward: {explanation}. "
         f"Original read: {verdict_block['rationale']}"
     )
     return verdict_block
+
+
+def _apply_evidence_gate(block, ev, quality=None):
+    """Every engine must expose evidence limitations and refuse unsupported BUYs."""
+    quality = quality or evidence_quality.assess_evidence(ev)
+    reasons = quality["blockers"].get(block.get("track"), [])
+    block["evidence_blockers"] = list(reasons)
+    block["actionable"] = block.get("verdict") == "BUY" and quality["actionable"].get(block.get("track"), False)
+    block["confidence_basis"] = "heuristic evidence strength; not a calibrated success probability"
+    if block.get("verdict") == "BUY" and reasons:
+        block["verdict"] = "WATCH"
+        block["confidence"] = min(6, block.get("confidence") or 6)
+        block["gated"] = True
+        block["evidence_gated"] = True
+        block["rationale"] = (f"Held to WATCH on evidence quality: {'; '.join(reasons)}. "
+                              f"Original read: {block.get('rationale', '')}")
+    return block
 
 
 def _horizon_label(days_min, days_max):
@@ -661,7 +713,7 @@ def judge_positional(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> 
         "horizon_basis": window["basis"],
         "levels": _positional_levels(ev),
     }
-    return _apply_regime_gate(_apply_rr_gate(block, ev, MIN_RR_POSITIONAL), ev)
+    return _apply_evidence_gate(_apply_regime_gate(_apply_rr_gate(block, ev, MIN_RR_POSITIONAL), ev), ev)
 
 
 def judge_intraday(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> dict:
@@ -708,9 +760,11 @@ def judge_intraday(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> di
     elif net >= INTRADAY_BUY_NET:
         missing = []
         if not above_vwap:
-            missing.append("price is not above VWAP")
+            missing.append("VWAP data unavailable" if _get(ev, "intraday", "price_vs_vwap_pct") is None
+                           else "price is not above VWAP")
         if not above_or:
-            missing.append("the opening range high is not cleared")
+            missing.append("opening range confirmation unavailable" if _get(ev, "intraday", "above_opening_range") is None
+                           else "the opening range high is not cleared")
         if not rvol_ok:
             missing.append(f"RVOL {_fmt(rvol)}x is under {INTRADAY_MIN_RVOL}x")
         rationale = (f"Net +{net} on the tape, but unconfirmed: {'; '.join(missing)}.")
@@ -736,7 +790,7 @@ def judge_intraday(ev, bull_score, bear_score, bull_reasons, bear_reasons) -> di
         "levels": _intraday_levels(ev),
         "minutes_to_close": minutes_left,
     }
-    return _apply_rr_gate(block, ev, MIN_RR_INTRADAY)
+    return _apply_evidence_gate(_apply_rr_gate(block, ev, MIN_RR_INTRADAY), ev)
 
 
 def _intraday_unavailable(reason, ev) -> dict:
@@ -807,7 +861,7 @@ def _positional_levels(ev) -> dict:
     price = _get(ev, "price", "live")
     sma_pct = _get(ev, "technicals", "price_vs_sma_pct")
     sma = None
-    if price is not None and sma_pct is not None and sma_pct != -100:
+    if price is not None and price > 0 and sma_pct is not None and sma_pct > -100:
         sma = round(price / (1 + sma_pct / 100.0), 2)
 
     return {
@@ -825,6 +879,8 @@ def _positional_levels(ev) -> dict:
 
 def evaluate(evidence: dict) -> dict:
     """evidence -> {scores, tracks: {intraday, positional}, ...}"""
+    evidence = evidence_quality.sanitize_evidence(evidence)
+    quality = evidence_quality.assess_evidence(evidence)
     bull = _bull_case(evidence)
     bear = _bear_case(evidence)
     ib = _intraday_bull(evidence)
@@ -850,11 +906,13 @@ def evaluate(evidence: dict) -> dict:
         "intraday": judge_intraday(evidence, ib.score(), ibear.score(),
                                    ib.reasons, ibear.reasons),
     }
+    tracks = {name: _apply_evidence_gate(block, evidence, quality) for name, block in tracks.items()}
 
     return {
         "scores": scores,
         "tracks": tracks,
         "engine": ENGINE_NAME,
+        "evidence_quality": quality,
         "ungrounded_numbers": [],   # rule engine only ever quotes evidence values
     }
 

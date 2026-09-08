@@ -152,10 +152,60 @@ python capture_demo.py
 That rewrites every bundle through the exact same yfinance path live mode uses,
 and relabels them as real captures.
 
-**Live** reads `universe.json` (editable; tickers must end in `.NS`), pulls ~1
-month of daily OHLC for the whole universe in one batched call, screens each
-cap bucket by day change, keeps the top `SHORTLIST_PER_BUCKET` (default 4), and
-only then pays for `.info` / `.news` / analyst recommendations on the survivors.
+**Live now defaults to all equities in NSE's official main-board and SME
+available-for-trading lists.** Discovery has no price, volume, liquidity or
+shortlist cutoff. Known classifications are retained from `universe.json`;
+other companies are `unclassified`, never assigned an invented market cap.
+BSE-only companies and securities absent from these two exchange lists are
+outside the declared scope. Source outages, stale lists and a last-resort
+curated fallback are explicitly marked as degraded coverage.
+
+Every discovered ticker gets an initial record in `intelligence.db`, including
+stocks with no usable provider data. Bounded downloads retrieve two years of
+daily OHLCV for every stock, and current-session bars when the market is open.
+The engine computes technical evidence and named strategy triggers for all of
+them, then researches company metrics, analyst coverage and sanitised headlines
+for **every stock**. Company sections have independent caches and retry failed
+sections on the next run; an interrupted scan preserves completed records.
+
+`SHORTLIST_PER_BUCKET` controls only the separate LLM narrative debate displayed
+on the overview. It does not limit whole-universe research. Every stock's rule
+analysis, evidence and missing fields are searchable through `GET /intelligence`.
+`GET /coverage` reports actual discovered, attempted, available, enriched,
+partial and missing counts. `GET /status` includes live scan progress.
+
+Run research without starting the scheduler, calling an LLM, sending Telegram
+messages or booking paper positions:
+
+```bash
+python intelligence.py
+python intelligence.py --coverage
+python intelligence.py --coverage --export all-stock-analysis.csv
+```
+
+The standalone command reads process environment settings; it does not load
+`.env`. The Flask app continues to load `.env`. `--daily-only` explicitly skips
+company enrichment while retaining all-stock price/strategy coverage;
+`--curated` explicitly restricts discovery to `universe.json`. For the app,
+set `FULL_EXCHANGE=0` or `INTELLIGENCE_RESEARCH_SCOPE=daily` only when those
+restrictions are intended. Default cold research can take hours on a best-effort
+public provider; later runs reuse cached sections. Rate limits and missing
+symbols are reported, not disguised as a complete market scan.
+
+Examples while the app is running:
+
+```text
+GET /coverage
+GET /intelligence?limit=100&offset=0
+GET /intelligence?search=RELIANCE&evidence=1
+GET /intelligence?status=missing_data
+GET /intelligence.csv
+```
+
+These are timestamped research snapshots, not streaming quotes. A separate
+freshness assessment identifies whether a saved result is still current.
+Selected debate candidates have prices refreshed before discussion, and the
+Judge checks freshness again before producing actionable signals.
 
 ### The evidence bundle
 
@@ -177,9 +227,19 @@ Every stock becomes one normalised bundle, and both engines see only this:
 A missing value is `null` **and** listed in `data_gaps`. Nothing is guessed,
 interpolated or carried forward.
 
-**This feed carries no raw fundamental ratios** — no P/E, P/B, ROE, margins or
-debt. The Fundamentalist works purely from sell-side targets and consensus, and
-both engines are instructed to say so rather than fake a valuation view.
+**Company fundamentals are now included where the provider supplies them:**
+trailing/forward P/E, price-to-book, ROE, profit and operating margins, revenue
+and earnings growth, debt/equity, market cap and reporting currencies. These
+are secondary-provider figures; retrieval time is not a financial filing date.
+Missing fields remain null. The Fundamentalist reports these metrics with
+limitations and does not apply universal debt or valuation thresholds across
+unlike sectors. Analyst targets remain opinions rather than estimated fair value.
+
+`evidence_quality` reports completeness, missing measurements, source timestamps
+and blockers per horizon. Neither its completeness percentage nor the panel's
+confidence is a calibrated probability of profit. Missing/invalid risk levels,
+stale quotes or unsupported numerical claims prevent an actionable BUY.
+The LLM must also have confirmation from the deterministic evidence rules.
 
 ---
 
@@ -863,7 +923,16 @@ file. `.env` is never read by the browser and never leaves the machine.
 | `BRAND` | `Dalal Desk` | header name |
 | `CONFIDENCE_THRESHOLD` | `7` | minimum confidence for a BUY to fire |
 | `AGENT_DELAY` | `0.6` | seconds of visual pacing per agent |
-| `SHORTLIST_PER_BUCKET` | `4` | movers per cap bucket sent to debate |
+| `SHORTLIST_PER_BUCKET` | `4` | narratives per classification bucket; never limits research |
+| `FULL_EXCHANGE` | `1` | discover all NSE main-board/SME trading-list equities |
+| `INTELLIGENCE_RESEARCH_SCOPE` | `all` | all company research; `daily` explicitly skips enrichment |
+| `INTELLIGENCE_WORKERS` | `4` | concurrent company research jobs (bounded to 8) |
+| `MARKET_BATCH_SIZE` | `100` | symbols per price-download batch (bounded to 200) |
+| `MARKET_DOWNLOAD_THREADS` | `4` | provider download threads (bounded to 8) |
+| `MARKET_DOWNLOAD_RETRIES` | `1` | retries of missing symbols (bounded to 2) |
+| `MARKET_DATA_TIMEOUT` | `15` | download request timeout in seconds |
+| `INTELLIGENCE_COMPANY_TTL_SECONDS` | `21600` | profile/recommendation cache lifetime |
+| `INTELLIGENCE_NEWS_TTL_SECONDS` | `1800` | headline cache lifetime |
 | `PORT` | `5000` | web server port |
 | `NO_BROWSER` | — | set to `1` to stop the tab opening itself |
 | `SCHEDULE_ENABLED` | `1` | run automatically at the scheduled times |
@@ -891,9 +960,14 @@ scheduler.py      unattended 09:00 / 09:45 runs
 history.py        outcome tracking, track record, signal cooldown
 scoring.py        deterministic agents + both Judges
 llm.py            LLM debate, provider detection, grounding verifier
-data_sources.py   demo loader, yfinance adapter, evidence builder
+data_sources.py   demo loader, bounded yfinance adapter, evidence builder
+stock_universe.py official NSE main-board/SME discovery with coverage metadata
+company_data.py   cached company ratios, analyst coverage and sanitised headlines
+intelligence.py   whole-universe research command and orchestration
+intelligence_store.py persisted per-stock evidence and searchable scan history
+evidence_quality.py shared source freshness, completeness and actionable gates
 dashboard.html    the whole UI — inline CSS/JS, no build step, no libraries
-universe.json     editable tickers per cap bucket
+universe.json     optional curated mode and existing classification hints
 capture_demo.py   rewrite demo_data/ from real live data
 demo_data/*.json  offline evidence bundles
 signals.db        SQLite audit (created on first run)
@@ -905,7 +979,10 @@ signals.db        SQLite audit (created on first run)
 |---|---|
 | `GET /` | the dashboard |
 | `POST /start` | `{"mode": "demo"\|"live"}` — starts a run on a background thread |
-| `GET /status` | full state as JSON (the page polls this every 500 ms) |
+| `GET /status` | state including current whole-universe research progress |
+| `GET /coverage` | persisted discovery, research and missing-data counts |
+| `GET /intelligence` | paginated/searchable all-stock analyses, optional full evidence |
+| `GET /intelligence.csv` | download all records from the latest research run |
 | `GET /config` | brand, agents, engine, thresholds, universe counts, schedule |
 | `GET /scheduler` | next scheduled run and the last one fired |
 | `GET /scoreboard` | the desk's own record: open signals, settled outcomes, hit rates with confidence intervals, and confidence calibration |

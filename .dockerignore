@@ -32,3 +32,7 @@ server.log
 server.err
 .venv/
 venv/
+.runtime/
+.intelligence_cache/
+.stock_universe_cache.json
+*.db-journal

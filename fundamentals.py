@@ -239,7 +239,7 @@ def screen(universe, log=None, only_order_driven=True) -> dict:
     book_file = load_orderbook()
 
     entries = []
-    for bucket in ("large", "mid", "small"):
+    for bucket in universe:
         for entry in (universe.get(bucket) or []):
             entries.append(dict(entry, bucket=bucket))
 
