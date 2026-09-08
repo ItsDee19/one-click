@@ -66,6 +66,15 @@ class IntelligenceApiTests(unittest.TestCase):
             self.assertEqual(self.app.active_universe(), {"unclassified": []})
         fetch.assert_called_once()
 
+    def test_intraday_route_delegates_scan_and_explicit_refresh(self):
+        with patch.object(self.app.intraday_service.SERVICE, "get", return_value={"status": "running", "picks": []}) as service, \
+                patch.object(self.app, "active_universe", side_effect=AssertionError("HTTP request must not download universe")):
+            self.assertEqual("running", self.client.get("/intraday").get_json()["status"])
+            self.assertFalse(service.call_args.kwargs["refresh"])
+            self.assertEqual("1", service.call_args.kwargs["key"])
+            self.client.get("/intraday?refresh=1")
+            self.assertTrue(service.call_args.kwargs["refresh"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,36 +6,36 @@
 <title>Intraday desk · Dalal Desk</title>
 <style>
   .desk-section{margin-top:28px;min-width:0;}
-  .record-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
-  .record-grid .desk-section{min-width:0;}
-  .scoretable{width:100%;border-collapse:collapse;min-width:540px;font-size:13px;}
+  .scoretable{width:100%;border-collapse:collapse;min-width:760px;font-size:13px;}
   .scoretable th{padding:14px 18px;text-align:left;color:var(--muted);font-size:12px;font-weight:600;background:var(--card-low);white-space:nowrap;}
   .scoretable td{padding:16px 18px;border-top:1px solid var(--border);font-variant-numeric:tabular-nums;}
-  .scoretable .num{text-align:right;}
-  .scoretable .name{font-weight:650;min-width:150px;}
+  .scoretable .num{text-align:right;}.scoretable .name{font-weight:650;min-width:150px;}
   .pos{color:var(--green);font-weight:650;}.neg{color:var(--red);font-weight:650;}.flat{color:var(--muted);}
-  .thin{display:inline-flex;font-size:11px;font-weight:600;padding:2px 6px;margin:5px 0 0 7px;border-radius:5px;background:var(--amber-soft);color:var(--amber);white-space:nowrap;}
-  .record-note{margin:12px 2px 0;color:var(--muted);font-size:12px;}
-  .pick{padding:22px 24px;border-top:1px solid var(--border);}
-  .pick:first-child{border-top:0;}
-  .picktop{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .record-note{margin:12px 2px;color:var(--muted);font-size:12px;line-height:1.6;}
+  .pick{padding:22px 24px;border-top:1px solid var(--border);overflow-wrap:anywhere;}
+  .pick:first-child{border-top:0;}.picktop{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
   .picktop h3{margin:0;font-size:17px;letter-spacing:-.02em;}
-  .stratchip{font-size:12px;font-weight:600;padding:4px 9px;border-radius:6px;background:var(--accent-soft);color:var(--accent);}
-  .conf{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;}
-  .conf b{color:var(--ink);font-size:14px;}
-  .lastpx{margin-left:auto;font-size:16px;font-weight:650;font-variant-numeric:tabular-nums;}
-  .subtle{font-size:13px;color:var(--muted);margin:5px 0 0;overflow-wrap:anywhere;}
+  .stratchip,.direction,.statechip{font-size:12px;font-weight:650;padding:4px 9px;border-radius:6px;}
+  .stratchip{background:var(--accent-soft);color:var(--accent);}
+  .direction.buy{background:var(--green-soft);color:var(--green);}.direction.sell{background:var(--red-soft);color:var(--red);}
+  .statechip{background:var(--card-high);color:var(--ink-2);}.statechip.research{background:var(--amber-soft);color:var(--amber);}
+  .subtle{font-size:13px;color:var(--muted);margin:6px 0 0;overflow-wrap:anywhere;}
   .levels{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin:18px 0 0;padding:16px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
-  .levels dt{font-size:12px;color:var(--muted);}
-  .levels dd{margin:5px 0 0;font-size:14px;font-weight:650;font-variant-numeric:tabular-nums;}
-  .levels .dim{color:var(--muted);}.levels .stop{color:var(--red);}.levels .tgt{color:var(--green);}
+  .levels dt{font-size:12px;color:var(--muted);}.levels dd{margin:5px 0 0;font-size:14px;font-weight:650;font-variant-numeric:tabular-nums;}
+  .levels .stop{color:var(--red);}.levels .tgt{color:var(--green);}
   .why{font-size:14px;line-height:1.65;margin:14px 0 0;color:var(--ink-2);}
-  .rec{font-size:12px;color:var(--muted);margin-top:12px;}.rec b{color:var(--ink-2);}
-  .method{margin-top:18px;color:var(--ink-2);font-size:13px;line-height:1.7;}
+  .rec{font-size:12px;line-height:1.65;color:var(--muted);margin-top:12px;}
+  .pick-reasons{font-size:12px;line-height:1.65;color:var(--amber);padding-left:18px;margin:10px 0 0;}
+  .scan-state{min-height:30px;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13px;}
+  .scan-state .spinner[hidden]{display:none;}.coverage{display:flex;flex-wrap:wrap;gap:8px 22px;margin:16px 0 0;}
+  .coverage div{display:flex;gap:6px;font-size:12px;}.coverage dt{color:var(--muted);}.coverage dd{margin:0;font-weight:650;font-variant-numeric:tabular-nums;}
+  .scan-context{padding:18px 24px;}.scan-context p{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.6;}
+  .list-more{margin-top:12px;}.method{margin-top:18px;color:var(--ink-2);font-size:13px;line-height:1.7;}
   .method summary{font-weight:600;color:var(--ink);cursor:pointer;padding:10px 0;}
-  .method p{max-width:85ch;margin:8px 0 0;}
-  @media(max-width:1280px){.record-grid{grid-template-columns:1fr;gap:0;}}
-  @media(max-width:700px){.levels{grid-template-columns:repeat(3,minmax(0,1fr));}.pick{padding:18px;}.lastpx{margin-left:0;}.record-grid{display:block;}}
+  .method summary:hover{color:var(--accent);}.method summary:active{color:var(--ink-2);}
+  .method p{max-width:90ch;margin:8px 0;}.method .card{margin-top:12px;}
+  #refresh{min-width:124px;}#load-error{margin-top:12px;}
+  @media(max-width:700px){.levels{grid-template-columns:repeat(3,minmax(0,1fr));}.pick,.scan-context{padding:18px;}}
   @media(max-width:380px){.levels{grid-template-columns:repeat(2,minmax(0,1fr));}}
 </style>
 <style>
@@ -108,42 +108,50 @@ input[type=search],input[type=text],input[type=number],select{border:1px solid v
 </div>
 <main class="wrap" id="main-content">
   <header class="page-header">
-    <div>
-      <h1 class="page-title">Intraday desk</h1>
-      <p class="page-description">Today's setups, with the measured record behind every rule.</p>
-    </div>
-    <div class="page-actions">
-      <a class="btn ghost" href="#strategy-record">View strategy record</a>
-      <button class="btn primary" id="refresh" type="button">Refresh data</button>
-    </div>
+    <div><h1 class="page-title">Intraday desk</h1><p class="page-description">Buy and sell setups for this session, with entry conditions and evidence.</p></div>
+    <div class="page-actions"><a class="btn ghost" href="#strategy-record">View strategy record</a><button class="btn primary" id="refresh" type="button" disabled>Refresh data</button></div>
   </header>
-  <div class="banner show warn"><strong>Read win rate and expectancy together.</strong> A rule can win most of its trades and still lose money. Analysis only — no orders are ever placed.</div>
-  <div class="banner" id="load-error" role="status" aria-live="polite"></div>
-  <section class="desk-section" aria-labelledby="setups-title">
-    <div class="sechead">
-      <h2 id="setups-title">Today's setups</h2>
-      <span class="note" id="picknote" role="status">Awaiting session data</span>
-    </div>
-    <div class="card data-card" id="picks"><div class="empty">Session data will appear here.</div></div>
-  </section>
-  <div class="record-grid" id="strategy-record">
-    <section class="desk-section" aria-labelledby="intraday-record-title">
-      <div class="sechead"><h2 id="intraday-record-title">Intraday strategy record</h2><span class="note" id="recnote">Awaiting record</span></div>
-      <div class="card data-card" id="scoreboard"><div class="empty">Measured strategies will appear here.</div></div>
-      <p class="record-note">Measured on NSE 5-minute bars. “Thin sample” flags a limited trade history.</p>
-    </section>
-    <section class="desk-section" aria-labelledby="swing-record-title">
-      <div class="sechead"><h2 id="swing-record-title">Swing strategy record</h2><span class="note" id="swingnote">Awaiting record</span></div>
-      <div class="card data-card" id="swingboard"><div class="empty">Positional strategies will appear here.</div></div>
-      <p class="record-note">Positional rules measured on daily bars, with their own sample window.</p>
-    </section>
+  <div class="card scan-context">
+    <div class="scan-state" role="status" aria-live="polite"><span class="spinner" id="scan-spinner" aria-hidden="true" hidden></span><span id="scan-status">Awaiting session data</span></div>
+    <p id="scan-time">Every setup shows when its signal and price were observed.</p>
+    <dl class="coverage" id="coverage" aria-label="Stock coverage"></dl>
+    <p id="coverage-note"></p>
   </div>
-  <details class="method">
-    <summary>How to read these results</summary>
-    <p><strong>On “70% win rate” strategies.</strong> None of these reaches it, and nothing credible does. These numbers are what each rule actually produced on this universe, not a figure from a trading site. Expectancy is the average profit per unit of risk. Read it alongside win rate and sample size.</p>
-    <p>The positional rules use years of daily bars; the intraday record is limited to 59 sessions. They cover different horizons and should be read with their own sample windows.</p>
+  <div class="banner" id="load-error" role="status" aria-live="polite" hidden><span id="error-message"></span><button class="btn ghost" id="retry" type="button" disabled>Retry loading</button></div>
+  <section class="desk-section" aria-labelledby="setups-title">
+    <div class="sechead"><h2 id="setups-title">Today's qualified picks</h2><span class="note" id="picknote" role="status">Awaiting scan</span></div>
+    <div class="card data-card" id="picks"><div class="empty">Checking the session and available evidence…</div></div>
+    <p class="record-note">Picks must pass the desk's evidence and current-entry checks. An empty list is a valid result. Analysis only; no orders are placed.</p>
+  </section>
+  <section class="desk-section" aria-labelledby="candidates-title">
+    <div class="sechead"><h2 id="candidates-title">Research candidates</h2><span class="note" id="candidatenote">Awaiting scan</span></div>
+    <p class="record-note">Active patterns still missing evidence or another entry requirement. These are observations to investigate.</p>
+    <div class="card data-card" id="candidates"><div class="empty">Research candidates will appear after the scan.</div></div>
+    <button class="btn ghost list-more" id="candidate-more" type="button" aria-controls="candidates" hidden disabled>Load more candidates</button>
+  </section>
+  <details class="method" id="history-details">
+    <summary>Session history <span id="historynote"></span></summary>
+    <p>Expired, completed, missed, conflicting, restricted or stale setups remain here for context.</p>
+    <div class="card data-card" id="history"><div class="empty">No earlier setups in this snapshot.</div></div>
+    <button class="btn ghost list-more" id="history-more" type="button" aria-controls="history" hidden disabled>Load more history</button>
   </details>
-  <footer><span>Analysis only. No orders are ever placed. Not investment advice.</span><span>Sample sizes always shown</span></footer>
+  <section class="desk-section" id="strategy-record" aria-labelledby="intraday-record-title">
+    <div class="sechead"><h2 id="intraday-record-title">Intraday strategy record</h2><span class="note" id="recnote">Awaiting record</span></div>
+    <div class="card data-card" id="scoreboard"><div class="empty">Strategy evidence will appear with the scan.</div></div>
+    <p class="record-note">Legacy gross results exclude trading costs and have not passed the current validation checks. A large trade count or a high win rate alone does not establish an edge.</p>
+  </section>
+  <details class="method" id="swing-details" hidden>
+    <summary>Swing strategy record <span id="swingnote"></span></summary>
+    <div class="card data-card" id="swingboard"></div>
+    <p>Positional results cover a different holding period and do not qualify today's intraday picks.</p>
+  </details>
+  <details class="method">
+    <summary>How picks qualify</summary>
+    <p>The engine checks the direction, entry window, observed price, stop, target and remaining reward for each setup. Signal time refers to the bar that formed the pattern; confirmation time is when that completed bar became available.</p>
+    <p>Strategy evidence is assessed after modeled costs, with separate validation of unseen sessions. Research-only and legacy records remain visible with their limitations. Evidence can support a strategy; it cannot guarantee today's outcome.</p>
+    <p>Expectancy is the average result per unit of risk. Read it with the cost basis, profit factor, sample window and validation status. Scanned stock counts describe coverage; they are not a count of independent trading days.</p>
+  </details>
+  <footer><span>Analysis only. No orders are ever placed. Not investment advice.</span><span>Direction, freshness and evidence shown together</span></footer>
 </main>
 <script>
 /* ===========================================================================
@@ -362,69 +370,139 @@ function deskSearch(inputId, clearId, onChange) {
 <script>
 (function () {
   "use strict";
-  function num(value, digits) { return typeof value === "number" && isFinite(value) ? value.toFixed(digits === undefined ? 2 : digits) : "—"; }
-  function rank(value) { return typeof value === "number" && isFinite(value) ? value : -Infinity; }
-  deskRequest("/config").then(function (cfg) { text(el("brand"), cfg.brand || "Dalal Desk"); document.title = (cfg.brand || "Dalal Desk") + " · Intraday desk"; }).catch(function () {});
-  function load() {
-    var button = el("refresh");
-    button.disabled = true; button.setAttribute("aria-busy", "true");
-    return deskLoad("/intraday", render, el("load-error")).finally(function () { button.disabled = false; button.removeAttribute("aria-busy"); });
+  var currentBook = null, inFlight = false, disconnected = false, pollTimer = null, expiryTimer = null;
+  var candidateLimit = 12, historyLimit = 12;
+  function finite(value) { return typeof value === "number" && isFinite(value); }
+  function num(value, digits) { return finite(value) ? value.toFixed(digits === undefined ? 2 : digits) : "—"; }
+  function metric(value, suffix, digits) { return finite(value) ? num(value, digits) + suffix : "—"; }
+  function rvalue(value) { return finite(value) ? (value >= 0 ? "+" : "") + num(value, 3) + "R" : "—"; }
+  function count(value) { return finite(value) ? value.toLocaleString("en-IN") : "—"; }
+  function label(value) { return String(value || "unverified").replace(/_/g, " "); }
+  function stamp(value) {
+    if (!value) { return "—"; }
+    var date = new Date(value);
+    if (!isFinite(date.getTime())) { return String(value); }
+    return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }).format(date) + " IST";
   }
-  el("refresh").addEventListener("click", load);
-  load();
+  function expired(pick) { var end = Date.parse(pick.expires_at); return isFinite(end) && end <= Date.now(); }
+  function ready(pick) {
+    return pick.state === "entry_ready" && pick.validation && pick.validation.qualified === true &&
+      ["long", "short"].includes(pick.direction) && isFinite(Date.parse(pick.expires_at)) && !expired(pick);
+  }
+  function updateHTML(id, html) { if (el(id).innerHTML !== html) { el(id).innerHTML = html; } }
+  function empty(title, detail) { return '<div class="empty"><strong>' + esc(title) + '</strong>' + (detail ? '<p>' + esc(detail) + '</p>' : '') + '</div>'; }
+  function clearTimers() { clearTimeout(pollTimer); clearTimeout(expiryTimer); pollTimer = expiryTimer = null; }
+  function planTimers() {
+    clearTimers();
+    if (document.hidden || disconnected || !currentBook) { return; }
+    if (currentBook.status === "running") { pollTimer = setTimeout(function () { load(false); }, 3000); }
+    var dates = (currentBook.picks || []).concat(currentBook.candidates || []).map(function (p) { return Date.parse(p.expires_at); }).filter(function (d) { return isFinite(d) && d > Date.now(); });
+    if (dates.length) { expiryTimer = setTimeout(function () { renderLists(); planTimers(); }, Math.min(2147483647, Math.max(1, Math.min.apply(null, dates) - Date.now() + 20))); }
+  }
+  function busy(value) {
+    var running = !!(currentBook && currentBook.status === "running" && !disconnected);
+    el("refresh").disabled = value || running;
+    el("refresh").setAttribute("aria-busy", String(value || running));
+    el("retry").disabled = value;
+    el("scan-spinner").hidden = !(value || running);
+  }
+  function showError(message) {
+    disconnected = true;
+    el("load-error").hidden = false; el("load-error").classList.add("show", "err");
+    text(el("error-message"), message + (currentBook ? " Last received research remains visible; refresh before considering an entry." : " Retry loading to check the session."));
+    text(el("scan-status"), "Session update unavailable");
+    if (!currentBook) { updateHTML("picks", empty("Session data unavailable", "Retry loading to check for current setups.")); text(el("picknote"), "No snapshot available"); }
+    renderLists();
+  }
+  function load(refresh) {
+    if (inFlight || document.hidden) { return Promise.resolve(); }
+    clearTimers(); inFlight = true; busy(true);
+    text(el("scan-status"), refresh ? "Starting a new scan…" : "Checking session data…");
+    return deskRequest(refresh ? "/intraday?refresh=1" : "/intraday").then(function (book) {
+      if (!book || typeof book !== "object" || !["idle", "running", "done", "error"].includes(book.status)) { throw new Error("The server returned an incomplete session response."); }
+      if (book.status === "error") {
+        if (!currentBook) { currentBook = book; render(book); }
+        showError(book.error || "The scan could not finish."); return;
+      }
+      disconnected = false; el("load-error").hidden = true; currentBook = book;
+      render(book);
+    }).catch(function (error) {
+      showError(error.message === "Failed to fetch" ? "The connection could not be reached." : "Research could not be updated. " + error.message);
+    }).finally(function () { inFlight = false; busy(false); planTimers(); });
+  }
   function render(book) {
-    renderPicks(book);
-    var strategies = book.strategies || {};
-    if (Object.keys(strategies).length) {
-      text(el("recnote"), (book.record_sessions ? book.record_sessions.toLocaleString("en-IN") + " stock-sessions · " : "") + (book.record_window || ""));
-      el("scoreboard").innerHTML = buildTable(strategies, "Intraday strategies ranked by expectancy");
-    } else {
-      text(el("recnote"), "Not measured yet");
-      el("scoreboard").innerHTML = '<div class="empty">' + esc(book.note || "No measured intraday record is available yet.") + '</div>';
-    }
-    var swing = book.swing || {}, records = swing.strategies || {};
-    if (Object.keys(records).length) {
-      text(el("swingnote"), (swing.symbols ? swing.symbols + " symbols · " : "") + (swing.window || ""));
-      el("swingboard").innerHTML = buildTable(records, "Swing strategies ranked by expectancy");
-    } else {
-      text(el("swingnote"), "Not measured yet");
-      el("swingboard").innerHTML = '<div class="empty">No measured swing record is available yet.</div>';
-    }
+    var progress = book.progress || {}, done = finite(progress.completed) ? progress.completed : progress.done;
+    var progressText = typeof book.progress === "string" ? " · " + book.progress : finite(done) && finite(progress.total) ? " · " + count(done) + " of " + count(progress.total) + " checked" : "";
+    text(el("scan-status"), book.status === "running" ? "Scanning eligible stocks" + progressText : book.status === "idle" ? "Awaiting a session scan" : book.tradeable === false ? "No live session · " + label(book.phase || "market closed") : "Scan complete · " + label(book.phase || "session open"));
+    text(el("scan-time"), book.generated ? "Snapshot: " + stamp(book.generated) : "A dated snapshot will appear when the scan completes.");
+    var c = book.coverage || {};
+    updateHTML("coverage", [["Listed", c.listed], ["Eligible", c.eligible], ["Usable sessions", c.usable_sessions], ["Missing sessions", c.missing_sessions], ["Invalid sessions", c.invalid_sessions], ["Stale sessions", c.stale_sessions]].map(function (item) { return '<div><dt>' + esc(item[0]) + '</dt><dd>' + count(item[1]) + '</dd></div>'; }).join(""));
+    text(el("coverage-note"), book.note || "Coverage excludes stocks without suitable session data or trading eligibility.");
+    renderLists();
+    var records = book.strategies || {};
+    text(el("recnote"), Object.keys(records).length ? (finite(book.record_sessions) ? count(book.record_sessions) + " stock-sessions · " : "") + (book.record_window || "Window unavailable") : "No record available");
+    updateHTML("scoreboard", Object.keys(records).length ? buildTable(records, "Intraday strategy evidence") : empty("No measured intraday record", "Patterns remain research-only until their evidence has been assessed."));
+    var swing = book.swing || {}, swingRecords = swing.strategies || {};
+    el("swing-details").hidden = !Object.keys(swingRecords).length;
+    if (!el("swing-details").hidden) { text(el("swingnote"), swing.window || ""); updateHTML("swingboard", buildTable(swingRecords, "Swing strategy evidence")); }
   }
-  function buildTable(records, label) {
-    var names = Object.keys(records).sort(function (a, b) { return rank((records[b] || {}).expectancy_r) - rank((records[a] || {}).expectancy_r); });
-    var rows = names.map(function (name) {
-      var row = records[name] || {};
-      if (!row.trades) { return '<tr><td class="name">' + esc(name) + '</td><td colspan="4">No signals in the sample</td></tr>'; }
-      var trusted = row.enough !== undefined ? row.enough : row.trusted;
-      var expectancy = row.expectancy_r, tone = expectancy > .05 ? "pos" : expectancy < -.005 ? "neg" : "flat";
-      return '<tr><td class="name">' + esc(name) + (trusted ? '' : '<span class="thin">Thin sample</span>') + '</td>' +
-        '<td class="num">' + esc(row.trades.toLocaleString("en-IN")) + '</td>' +
-        '<td class="num">' + num(row.win_rate_pct, 1) + '%</td>' +
-        '<td class="num ' + tone + '">' + (expectancy >= 0 ? '+' : '') + num(expectancy, 3) + 'R</td>' +
-        '<td class="num">' + num(row.profit_factor) + '</td></tr>';
+  function buildTable(records, title) {
+    var rows = Object.keys(records).sort().map(function (name) {
+      var row = records[name] || {}, net = row.is_net === true;
+      var basis = net ? "After modeled costs" : "Legacy gross · unverified";
+      var status = net ? label(row.validation_status || "research_only") : "Current validation not passed";
+      var expectancy = row.expectancy_r, tone = !net ? "flat" : expectancy > 0 ? "pos" : expectancy < 0 ? "neg" : "flat";
+      return '<tr><th scope="row" class="name">' + esc(name) + '</th><td>' + esc(basis) + '<div class="subtle">' + esc(status) + '</div></td><td class="num">' + count(row.trades) + '</td><td class="num">' + metric(row.win_rate_pct, "%", 1) + '</td><td class="num ' + tone + '">' + rvalue(expectancy) + '</td><td class="num">' + num(row.profit_factor) + '</td></tr>';
     }).join("");
-    return '<div class="table-wrap" tabindex="0" role="region" aria-label="' + esc(label) + '"><table class="scoretable"><thead><tr><th scope="col">Strategy</th><th scope="col" class="num">Trades</th><th scope="col" class="num">Win rate</th><th scope="col" class="num">Expectancy</th><th scope="col" class="num">Profit factor</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    return '<div class="table-wrap" tabindex="0" role="region" aria-label="' + esc(title) + '"><table class="scoretable"><thead><tr><th scope="col">Strategy</th><th scope="col">Evidence basis</th><th scope="col" class="num">Trades</th><th scope="col" class="num">Win rate</th><th scope="col" class="num">Expectancy</th><th scope="col" class="num">Profit factor</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
-  function renderPicks(book) {
-    var picks = book.picks || [];
-    if (!picks.length) {
-      text(el("picknote"), book.tradeable === false ? "No live session" : "No setups triggered");
-      el("picks").innerHTML = '<div class="empty"><strong>' + (book.tradeable === false ? 'Waiting for a live session' : 'No setups in this session') + '</strong><p>' + esc(book.note || (book.tradeable === false ? "The market is not open, so there is no session to scan." : "No strategy has triggered a setup yet. Refresh after new session data is available.")) + '</p></div>';
-      return;
-    }
-    text(el("picknote"), picks.length + " setup" + (picks.length === 1 ? "" : "s") + (book.generated ? " · " + book.generated : ""));
-    el("picks").innerHTML = picks.map(function (pick) {
-      var record = pick.record || {};
-      function cell(label, value, tone) { return '<div><dt>' + esc(label) + '</dt><dd class="' + (tone || '') + '">' + value + '</dd></div>'; }
-      var levels = cell("Entry", deskMoney(pick.entry)) + cell("Stop", deskMoney(pick.stop), "stop") + cell("Target", deskMoney(pick.target), "tgt") + cell("Reward:risk", pick.reward_risk ? num(pick.reward_risk) + ":1" : "—") + cell("VWAP", deskMoney(pick.vwap)) + cell("RVOL", pick.rvol ? num(pick.rvol) + "x" : "—");
-      var evidence;
-      if (!record.trades) { evidence = "No measured record for this rule yet."; }
-      else if (!record.trusted) { evidence = 'This rule has only <b>' + esc(record.trades) + '</b> trades in the sample — too thin to trust. ' + esc(record.note || ""); }
-      else { evidence = '<b>' + esc(pick.strategy) + '</b> over <b>' + esc(record.trades.toLocaleString("en-IN")) + '</b> measured trades: won <b>' + num(record.win_rate_pct, 1) + '%</b>, expectancy <b>' + (record.expectancy_r >= 0 ? '+' : '') + num(record.expectancy_r, 3) + 'R</b> per trade' + (record.profit_factor ? ', profit factor <b>' + num(record.profit_factor) + '</b>' : '') + '.'; }
-      return '<article class="pick"><div class="picktop"><h3>' + esc(pick.symbol) + '</h3><span class="stratchip">' + esc(pick.strategy) + '</span><span class="conf">Confidence <b>' + esc(pick.confidence) + '</b>/10</span><span class="lastpx">' + deskMoney(pick.last) + '</span></div><p class="subtle">' + esc(pick.name || "") + (pick.sector ? ' · ' + esc(pick.sector) : '') + '</p><dl class="levels">' + levels + '</dl><p class="why">' + esc(pick.why) + '</p><div class="rec">' + evidence + '</div></article>';
-    }).join("");
+  function renderLists() {
+    if (!currentBook) { return; }
+    var book = currentBook, original = book.picks || [], live = !disconnected && book.status === "done" && book.tradeable === true;
+    var picks = live ? original.filter(ready) : [];
+    var expiredRows = original.concat(book.candidates || []).filter(expired).map(function (p) { return Object.assign({}, p, { state: "expired" }); });
+    var candidates = (book.candidates || []).filter(function (p) { return !expired(p); });
+    candidates = candidates.concat(original.filter(function (p) { return !expired(p) && (!live || !ready(p)); }));
+    var history = expiredRows.concat(book.history || []);
+    var headline = book.status === "running" ? "Scanning the stock universe" : disconnected ? "Qualified picks unavailable" : book.tradeable === false ? "Waiting for a live session" : "No qualified trade right now";
+    var detail = book.status === "running" ? "Checking eligible stocks and entry conditions. This page updates as the scan runs." : disconnected ? "The last snapshot is retained below as research. Retry loading before considering an entry." : book.tradeable === false ? "Current entries appear only during a live session with usable data." : "No setup currently passes both the evidence and entry checks. Review research candidates or refresh after new completed bars arrive.";
+    text(el("picknote"), picks.length ? count(picks.length) + " entry-ready pick" + (picks.length === 1 ? "" : "s") : book.status === "running" ? "Scan in progress" : "No qualified picks");
+    updateHTML("picks", picks.length ? picks.map(function (p) { return pickCard(p, "ready"); }).join("") : empty(headline, detail));
+    text(el("candidatenote"), count(Math.min(candidateLimit, candidates.length)) + " of " + count(candidates.length) + " candidates");
+    updateHTML("candidates", candidates.length ? candidates.slice(0, candidateLimit).map(function (p) { return pickCard(p, disconnected || book.status === "running" ? "snapshot" : "research"); }).join("") : empty("No active research candidates", "Candidates appear when a current pattern is found but has not qualified for an entry."));
+    el("candidate-more").hidden = candidates.length <= candidateLimit;
+    el("candidate-more").disabled = false;
+    text(el("historynote"), "· " + count(history.length) + " setups");
+    updateHTML("history", history.length ? history.slice(0, historyLimit).map(function (p) { return pickCard(p, "history"); }).join("") : empty("No earlier setups in this snapshot", "Completed and expired patterns will appear here when available."));
+    el("history-more").hidden = history.length <= historyLimit;
+    el("history-more").disabled = false;
   }
+  function pickCard(pick, kind) {
+    var direction = pick.direction === "short" ? "SELL" : pick.direction === "long" ? "BUY" : "Direction unavailable";
+    var tone = pick.direction === "short" ? "sell" : pick.direction === "long" ? "buy" : "";
+    var state = kind === "ready" ? "Entry ready" : kind === "snapshot" ? "Previous snapshot" : kind === "research" ? "Research only" : label(pick.state || "historical");
+    function cell(name, value, cls) { return '<div><dt>' + esc(name) + '</dt><dd class="' + (cls || '') + '">' + value + '</dd></div>'; }
+    var levels = cell("Current entry", deskMoney(pick.current_entry)) + cell("Observed price", deskMoney(pick.last)) + cell("Stop", deskMoney(pick.stop), "stop") + cell("Target", deskMoney(pick.target), "tgt") + cell("Current reward:risk", metric(pick.current_reward_risk, ":1")) + cell("RVOL", metric(pick.rvol, "x"));
+    var validation = pick.validation || {}, record = pick.record || {}, reasons = (pick.reasons || []).concat(validation.reasons || []).filter(function (x, i, all) { return typeof x === "string" && all.indexOf(x) === i; });
+    var evidence = validation.qualified === true ? "Strategy evidence passed the desk's current checks." : "Evidence: " + label(validation.status || "unverified") + ".";
+    if (record.trades) { evidence += " " + count(record.trades) + " trades · " + (record.is_net === true ? "after modeled costs" : "legacy gross, unverified") + " · expectancy " + rvalue(record.expectancy_r) + "."; }
+    return '<article class="pick" tabindex="-1"><div class="picktop"><span class="direction ' + tone + '">' + direction + '</span><h3>' + esc(pick.symbol || pick.ticker || "Unknown symbol") + '</h3><span class="stratchip">' + esc(pick.strategy || "Unnamed pattern") + '</span><span class="statechip ' + (kind === "research" ? "research" : "") + '">' + esc(state) + '</span></div><p class="subtle">' + esc(pick.name || "") + (pick.sector ? ' · ' + esc(pick.sector) : '') + '</p><dl class="levels">' + levels + '</dl><p class="subtle">Signal entry: ' + deskMoney(pick.entry) + ' · Signal: ' + esc(stamp(pick.signal_at)) + ' · Confirmed: ' + esc(stamp(pick.confirmed_at)) + '</p><p class="subtle">Price as of: ' + esc(stamp(pick.as_of)) + ' · Entry expires: ' + esc(stamp(pick.expires_at)) + '</p><p class="why">' + esc(pick.why || "No additional pattern explanation is available.") + '</p><div class="rec">' + esc(evidence) + '</div>' + (reasons.length ? '<ul class="pick-reasons">' + reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join("") + '</ul>' : '') + '</article>';
+  }
+  el("refresh").addEventListener("click", function () { if (disconnected || !(currentBook && currentBook.status === "running")) { load(true); } });
+  el("retry").addEventListener("click", function () { load(true); });
+  function more(kind) {
+    var before = kind === "candidates" ? candidateLimit : historyLimit;
+    if (kind === "candidates") { candidateLimit += 12; } else { historyLimit += 12; }
+    renderLists();
+    var rows = el(kind).querySelectorAll("article"); if (rows[before]) { rows[before].focus(); }
+  }
+  el("candidate-more").addEventListener("click", function () { more("candidates"); });
+  el("history-more").addEventListener("click", function () { more("history"); });
+  document.addEventListener("visibilitychange", function () { clearTimers(); if (!document.hidden) { renderLists(); load(false); } });
+  window.addEventListener("online", function () { load(false); });
+  window.addEventListener("pagehide", clearTimers);
+  deskRequest("/config").then(function (cfg) { text(el("brand"), cfg.brand || "Dalal Desk"); document.title = (cfg.brand || "Dalal Desk") + " · Intraday desk"; }).catch(function () {});
+  load(false);
 })();
 </script>
 </body>

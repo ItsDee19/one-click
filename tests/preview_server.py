@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -104,19 +105,38 @@ def fixture_data():
 
     intraday_record = json.loads((ROOT / "backtest_intraday.json").read_text(encoding="utf-8"))
     swing_record = json.loads((ROOT / "backtest_swing.json").read_text(encoding="utf-8"))
-    intraday = {"generated": STAMP, "tradeable": False, "note": STAMP,
+    intraday = {"status": "done", "generated": STAMP, "tradeable": True,
+                "phase": "offline_preview", "note": "Illustrative offline preview. Prices and qualification states are UI fixtures, not live trading signals.",
                 "record_window": intraday_record["window"],
                 "record_sessions": intraday_record["stock_sessions"],
-                "strategies": intraday_record["strategies"], "swing": swing_record, "picks": []}
-    for b, strategy in zip(bundles[:2], ("RVOL momentum", "ORB breakout")):
+                "coverage": {"listed": 2288, "eligible": 164, "usable_sessions": 160,
+                             "missing_sessions": 3, "stale_sessions": 1},
+                "strategies": intraday_record["strategies"], "swing": swing_record,
+                "picks": [], "candidates": [], "history": []}
+    for i, (b, strategy) in enumerate(zip(bundles[:4], ("ORB breakout", "VWAP rejection", "RVOL momentum", "ORB breakdown"))):
         price = b["price"]["live"]
         record = copy.deepcopy(intraday_record["strategies"][strategy])
-        record["trusted"] = record["enough"]
-        intraday["picks"].append({"symbol": b["symbol"], "name": b["name"], "sector": b["sector"],
-                                  "strategy": strategy, "entry": price, "stop": round(price * .98, 2),
-                                  "target": round(price * 1.04, 2), "last": price, "reward_risk": 2,
-                                  "vwap": round(price * .993, 2), "rvol": 2.1, "confidence": 7,
-                                  "record": record, "why": "Illustrative setup for UI preview; no live signal has been generated."})
+        short = i % 2 == 1
+        qualified = i < 2
+        if qualified:
+            strategy = "Illustrative " + strategy
+            record = {"trades": 240, "win_rate_pct": 48.5, "expectancy_r": .16,
+                      "profit_factor": 1.35, "is_net": True, "validation_status": "qualified_fixture"}
+            intraday["strategies"][strategy] = record
+        intraday["picks" if qualified else "candidates" if i == 2 else "history"].append({
+            "ticker": b["symbol"] + ".NS", "symbol": b["symbol"],
+            "name": b["name"] + " · offline fixture", "sector": b["sector"],
+            "direction": "short" if short else "long", "action": "SELL" if short else "BUY",
+            "strategy": strategy, "state": "entry_ready" if qualified else "research_only" if i == 2 else "completed",
+            "entry": price, "current_entry": price, "stop": round(price * (1.02 if short else .98), 2),
+            "target": round(price * (.96 if short else 1.04), 2), "last": price,
+            "reward_risk": 2, "current_reward_risk": 2, "entry_drift_r": 0,
+            "vwap": round(price * .993, 2), "rvol": 2.1, "record": record,
+            "validation": {"status": "qualified_fixture" if qualified else "legacy_unverified",
+                           "qualified": qualified,
+                           "reasons": [] if qualified else ["Legacy gross record has not passed current validation."]},
+            "reasons": ["Illustrative qualification state only; no real entry is suggested."],
+            "why": "Illustrative setup for UI preview; no live signal has been generated."})
     ipos = {"generated": STAMP, "open": 2, "ipos": []}
     for name, symbol, verdict, window in (("Example Renewables", "EXAMPLEREN", "APPLY", "open"),
                                           ("Sample Digital Services", "SAMPLEDIG", "NEUTRAL", "open"),
@@ -143,7 +163,41 @@ def fixture_data():
 
 CONFIG, VERDICTS, SECTORS, ORDERBOOK, INTRADAY, IPOS, QUALITY = fixture_data()
 RUN = {"started": None, "id": 1, "capital": None}
+INTRADAY_RUN = {"started": None}
 RUN_LOCK = threading.Lock()
+
+
+def intraday_fixture(scenario):
+    """Exercise scan, direction, evidence and expiry states with invented data."""
+    data = copy.deepcopy(INTRADAY)
+    now = datetime.now(timezone.utc)
+    data["generated"] = now.isoformat()
+    for key in ("picks", "candidates", "history"):
+        for pick in data[key]:
+            pick.update(signal_at=(now - timedelta(minutes=8)).isoformat(),
+                        confirmed_at=(now - timedelta(minutes=3)).isoformat(),
+                        as_of=now.isoformat(), expires_at=(now + timedelta(minutes=3)).isoformat())
+    with RUN_LOCK:
+        started = INTRADAY_RUN["started"]
+    if started is not None and time.monotonic() - started < 6:
+        data.update(status="running", progress={"completed": 84, "total": 164}, picks=[], candidates=[], history=[])
+    if scenario == "empty":
+        data.update(status="done", tradeable=False, phase="closed", picks=[], candidates=[], history=[],
+                    note="Offline fixture: there is no live session to scan.")
+    elif scenario == "no-qualified":
+        data["picks"] = []
+        data["note"] = "Offline fixture: no current setup meets the evidence and entry requirements."
+    elif scenario == "partial":
+        data["coverage"].update(usable_sessions=104, missing_sessions=45, stale_sessions=15)
+        data["note"] = "Offline fixture: 45 sessions were unavailable and 15 were stale. Results cover 104 usable sessions."
+    elif scenario == "stale":
+        for pick in data["picks"] + data["candidates"]:
+            pick.update(state="stale", expires_at=(now - timedelta(minutes=1)).isoformat(),
+                        as_of=(now - timedelta(minutes=20)).isoformat(),
+                        reasons=["Offline fixture: observed session price is stale."])
+            data["history"].append(pick)
+        data.update(picks=[], candidates=[], note="Offline fixture: stale prices prevent any current entry.")
+    return data
 
 
 def status_fixture(scenario):
@@ -207,11 +261,12 @@ class PreviewHandler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         if url.path in PAGES:
             scenario = parse_qs(url.query).get("scenario", [self.scenario()])[0]
-            if scenario not in ("loaded", "empty", "idle", "error", "slow"):
+            if scenario not in ("loaded", "empty", "idle", "error", "slow", "running", "no-qualified", "partial", "stale", "refresh-error"):
                 scenario = "loaded"
             if "scenario" in parse_qs(url.query):
                 with RUN_LOCK:
                     RUN["started"] = None
+                    INTRADAY_RUN["started"] = time.monotonic() if scenario == "running" else None
             html = page_render.render_file(str(ROOT / PAGES[url.path]))
             # A remembered API override cannot escape the local fixture server.
             guard = "<script>try{localStorage.removeItem('dalal.api');var u=new URL(location.href);u.searchParams.delete('api');history.replaceState(null,'',u);}catch(e){}window.__API_BASE__='';window.__OFFLINE_PREVIEW__=true;</script>"
@@ -228,9 +283,14 @@ class PreviewHandler(BaseHTTPRequestHandler):
             return self.respond({"error": "Unknown preview endpoint"}, code=404)
         if scenario == "error":
             return self.respond({"error": "Simulated backend unavailable for UI QA."}, code=503)
+        if url.path == "/intraday" and parse_qs(url.query).get("refresh") == ["1"]:
+            if scenario == "refresh-error":
+                return self.respond({"error": "Simulated refresh failure; retry retrieves the prior snapshot."}, code=503)
+            with RUN_LOCK:
+                INTRADAY_RUN["started"] = time.monotonic()
         if scenario == "slow" and url.path != "/status":
             time.sleep(4)
-        data = status_fixture(scenario) if url.path == "/status" else copy.deepcopy(endpoints[url.path])
+        data = status_fixture(scenario) if url.path == "/status" else intraday_fixture(scenario) if url.path == "/intraday" else copy.deepcopy(endpoints[url.path])
         if scenario == "empty":
             if url.path == "/intraday":
                 data.update(picks=[], note="Offline fixture: there is no live session to scan.")

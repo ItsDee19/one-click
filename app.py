@@ -31,6 +31,7 @@ import fundamentals
 import history
 from intelligence_store import IntelligenceStore
 import intraday_desk
+import intraday_service
 import ipo
 import llm
 import market
@@ -1549,7 +1550,10 @@ def ipos_route():
 def intraday_route():
     """Today's intraday setups, each from a named and separately measured rule."""
     try:
-        return jsonify(intraday_desk.scan(log=log, universe=active_universe(log=log)))
+        return jsonify(intraday_service.SERVICE.get(
+            universe_loader=lambda: active_universe(log=log),
+            key=env_str("FULL_EXCHANGE", "1"),
+            refresh=request.args.get("refresh") == "1", log=log))
     except Exception as exc:                                       # noqa: BLE001
         return jsonify({"error": scrub(f"{type(exc).__name__}: {exc}")}), 500
 

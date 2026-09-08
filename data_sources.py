@@ -307,12 +307,12 @@ def _import_yf():
     return yf
 
 
-def _frame_for(downloaded, ticker, single):
+def _frame_for(downloaded, ticker, single, preserve_rows=False):
     """Pull one ticker's OHLC frame out of a yf.download result."""
     if downloaded is None or getattr(downloaded, "empty", True):
         return None
     if getattr(downloaded.columns, "nlevels", 1) == 1:
-        return _valid_frame(downloaded) if single else None
+        return (downloaded.copy() if preserve_rows else _valid_frame(downloaded)) if single else None
     try:
         frame = downloaded[ticker]
     except (KeyError, TypeError):
@@ -320,7 +320,9 @@ def _frame_for(downloaded, ticker, single):
             frame = downloaded.xs(ticker, axis=1, level=1)
         except (KeyError, TypeError, ValueError):
             return None
-    return _valid_frame(frame)
+    # Intraday session validation must see duplicate, missing and malformed rows;
+    # silently repairing them here can manufacture a complete opening range.
+    return frame.copy() if preserve_rows else _valid_frame(frame)
 
 
 def _valid_frame(frame):
@@ -349,6 +351,8 @@ def _valid_frame(frame):
 
 def _session_frame(frame, moment=None):
     """Aligned bars belonging to today's NSE continuous session, in IST."""
+    if frame is not None and (frame.index.has_duplicates or not frame.index.is_monotonic_increasing):
+        return None
     frame = _valid_frame(frame)
     if frame is None:
         return None
@@ -361,7 +365,8 @@ def _session_frame(frame, moment=None):
         return None
     start = moment.replace(hour=9, minute=15, second=0, microsecond=0)
     close = moment.replace(hour=15, minute=30, second=0, microsecond=0)
-    frame = frame[(frame.index >= start) & (frame.index < close) & (frame.index <= moment)]
+    frame = frame[(frame.index >= start) & (frame.index < close)
+                  & (frame.index + timedelta(minutes=5) <= moment)]
     return None if frame.empty else frame
 
 
@@ -395,7 +400,7 @@ def download_frames(tickers, period=HISTORY_PERIOD, interval="1d", log=None):
                 say(f"{interval} batch failed ({type(exc).__name__}), attempt {attempt + 1}")
                 downloaded = None
             for ticker in pending:
-                frame = _frame_for(downloaded, ticker, len(pending) == 1)
+                frame = _frame_for(downloaded, ticker, len(pending) == 1, preserve_rows=interval != "1d")
                 if frame is not None:
                     frames[ticker] = frame
             pending = [ticker for ticker in pending if ticker not in frames]
@@ -915,26 +920,16 @@ def fired_strategies(quote) -> dict:
 
     frame = _session_frame(quote.get("intraday_frame"))
     if frame is not None and not getattr(frame, "empty", True):
-        bars = [{"open": o, "high": h, "low": l, "close": c, "volume": v}
-                for o, h, l, c, v in zip(_series_values(frame, "Open"),
-                                         _series_values(frame, "High"),
-                                         _series_values(frame, "Low"),
-                                         _series_values(frame, "Close"),
-                                         _series_values(frame, "Volume"))]
-        daily = _valid_frame(quote.get("frame"))
-        prev_close = None
-        if daily is not None and not getattr(daily, "empty", True):
-            closes = _series_values(daily, "Close")
-            prev_close = (closes[-2] if daily.index[-1].date() == market.now_ist().date() and len(closes) >= 2
-                          else closes[-1] if closes and daily.index[-1].date() != market.now_ist().date() else None)
-        s = strategies.session(bars, prev_close=prev_close, rvol=quote.get("rvol"))
+        import intraday_data
+        import intraday_desk
+        moment = market.now_ist()
+        reference = intraday_data.daily_reference(quote.get("frame"), moment.date())
+        s = strategies.session(intraday_desk._bars_from(frame),
+                               prev_close=reference.get("prev_close"),
+                               avg_volume=reference.get("avg_volume"), now=moment)
         if s:
-            for name, fn in strategies.STRATEGIES.items():
-                try:
-                    setup = fn(s)
-                except Exception:                                  # noqa: BLE001
-                    setup = None
-                if setup:
+            for name, setup in strategies.signals(s).items():
+                if intraday_desk.setup_lifecycle(setup, s, moment)["state"] == "entry_ready":
                     out["intraday"][name] = setup["why"]
 
     # the long frame when the shortlist paid for one, else the screener's month

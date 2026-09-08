@@ -21,6 +21,10 @@ quality_screen.json
 intelligence.db
 intelligence.db-journal
 .runtime/
+.intraday_cache/
+intraday_observations.db*
+backtest_intraday_v2.json
 
 # local static audit evidence (machine-specific paths)
 tests/premium-audit.json
+tests/intraday-premium-audit.json

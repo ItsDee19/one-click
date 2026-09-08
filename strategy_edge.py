@@ -70,7 +70,17 @@ def _load(path, key):
 
 
 def intraday_record():
-    return _load(INTRADAY_RECORD, "intraday")
+    # Reassess age and version on every read; a cached legacy hit-rate must not vote.
+    import intraday_desk
+    import intraday_validation
+    import strategies
+    _raw, blob = intraday_desk.load_record()
+    admitted = {}
+    for name, direction in strategies.STRATEGY_DIRECTIONS.items():
+        check = intraday_validation.assess_record(blob, name, direction)
+        if check["qualified"]:
+            admitted[name] = dict(check["metrics"], enough=True, direction=direction)
+    return admitted
 
 
 def swing_record():
@@ -135,7 +145,24 @@ def edge(fired, record):
 
 
 def intraday_edge(fired):
-    return edge(fired, intraday_record())
+    # A profitable short setup argues for downside, not an increase in BUY conviction.
+    record = intraday_record()
+    result = edge(fired, {})
+    result.update(measured=bool(record), untrusted=[])
+    for name, detail in (fired or {}).items():
+        stat = record.get(name)
+        points = _points_for(stat)
+        if points is None:
+            result["untrusted"].append(name)
+            continue
+        side = "against" if stat["direction"] == "short" else "for"
+        result[f"{side}_points"] += max(0, points)
+        result[f"{side}_reasons"].append(
+            f"{name} ({stat['direction']}): {detail}. Held-out net expectancy "
+            f"{stat['expectancy_r']:+.3f}R over {stat['trades']} trades.")
+    for side in ("for", "against"):
+        result[f"{side}_points"] = round(min(result[f"{side}_points"], MAX_POINTS_TOTAL), 1)
+    return result
 
 
 def swing_edge(fired):

@@ -1,5 +1,21 @@
 # UI redesign verification
 
+## Intraday repair verification — 8 September 2026
+
+The repaired engine/frontend suite passes 207 tests after rebuilding the static
+pages with the existing same-origin API configuration. Intraday behavior tests
+cover BUY/SELL, unverified evidence, expiry, scan polling, request overlap,
+failure recovery and bounded rendering. Backend fixtures verify the asynchronous
+route without invoking market providers, credentials, notifications or orders.
+
+The isolated preview was checked in the Codex browser at desktop size and
+390 × 844: qualified BUY/SELL fixture cards, scan progress and completion,
+no-qualified state, and an initial failed request with Retry loading. The mobile
+layout remained readable. Prices and qualification in that preview were clearly
+marked illustrative fixtures. Live NSE latency and trading performance were not
+measured. The strict premium audit reports no changed-source findings; existing
+externally-wired button findings remain, as explained below.
+
 ## Automated checks
 
 `python -B -m unittest discover -s tests -p 'test_*.py' -v` passes all 11 checks after `python build_web.py`. The suite runs the two Node VM tests when Node is available. No external requests or application imports are involved.
